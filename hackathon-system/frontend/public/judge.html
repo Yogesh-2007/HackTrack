@@ -1,0 +1,357 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Judge Panel — HackTrack</title>
+  <link rel="stylesheet" href="/css/style.css">
+  <style>
+    .judge-layout { display: grid; grid-template-columns: 280px 1fr; gap: 0; min-height: calc(100vh - 60px); }
+    @media(max-width:768px) { .judge-layout { grid-template-columns: 1fr; } }
+    .judge-sidebar {
+      background: var(--bg-card); border-right: 1px solid var(--border);
+      padding: 20px 0; position: sticky; top: 60px;
+      height: calc(100vh - 60px); overflow-y: auto;
+    }
+    .team-list { padding: 0 12px; }
+    .team-item {
+      padding: 12px; border-radius: var(--radius-md);
+      cursor: pointer; transition: var(--transition);
+      border: 1px solid transparent; margin-bottom: 6px;
+    }
+    .team-item:hover { background: var(--bg-hover); }
+    .team-item.active { background: rgba(0,212,255,0.1); border-color: rgba(0,212,255,0.25); }
+    .team-item.scored { border-left: 3px solid var(--accent-green); }
+    .team-name-label { font-family: var(--font-display); font-size: 13px; font-weight: 700; color: var(--text-primary); letter-spacing: 0.04em; }
+    .team-college { font-size: 11px; color: var(--text-muted); margin-top: 2px; }
+    .team-score-badge { font-family: var(--font-mono); font-size: 10px; color: var(--accent-green); margin-top: 4px; }
+    .judge-main { padding: 28px 32px; }
+    @media(max-width:768px) { .judge-main { padding: 16px; } }
+    .score-panel { display: none; }
+    .score-form-wrap { max-width: 600px; }
+    .criteria-grid { display: grid; gap: 0; }
+    .total-score-display {
+      text-align: center; padding: 20px;
+      background: var(--bg-elevated); border-radius: var(--radius-lg);
+      border: 1px solid var(--border); margin: 24px 0;
+    }
+    .total-val { font-family: var(--font-display); font-size: 3rem; font-weight: 700; }
+    .total-label { font-family: var(--font-mono); font-size: 11px; color: var(--text-muted); text-transform: uppercase; letter-spacing: 0.1em; }
+    .score-breakdown {
+      display: grid; grid-template-columns: repeat(3, 1fr); gap: 12px; margin: 12px 0 24px;
+    }
+    .breakdown-item { text-align: center; }
+    .breakdown-val { font-family: var(--font-mono); font-size: 1.2rem; font-weight: 600; }
+    .breakdown-label { font-size: 10px; color: var(--text-muted); text-transform: uppercase; letter-spacing: 0.06em; margin-top: 2px; }
+    .sidebar-search { padding: 0 12px 12px; }
+  </style>
+</head>
+<body>
+
+  <!-- Login Overlay -->
+  <div id="login-overlay" style="position:fixed;inset:0;background:var(--bg-deep);z-index:9999;display:flex;align-items:center;justify-content:center;">
+    <div class="card" style="max-width:400px; width:100%; margin:0 16px;">
+      <div style="text-align:center; margin-bottom:24px;">
+        <div style="font-size:36px; margin-bottom:8px;">⚖️</div>
+        <h2 style="color:var(--text-primary);">Judge Login</h2>
+        <p style="color:var(--text-secondary); font-size:13px; margin-top:4px;">HackTrack Evaluation System</p>
+      </div>
+      <div id="login-error" class="alert alert-error hidden"></div>
+      <div class="form-group"><label class="form-label">Email</label><input type="email" class="form-control" id="login-email" placeholder="judge@hackathon.com"></div>
+      <div class="form-group"><label class="form-label">Password</label><input type="password" class="form-control" id="login-password" placeholder="••••••••"></div>
+      <button onclick="doLogin()" class="btn btn-primary btn-full" id="login-btn">Login as Judge</button>
+    </div>
+  </div>
+
+  <div id="judge-ui" class="hidden">
+    <nav class="navbar">
+      <div class="navbar-inner">
+        <a href="/" class="navbar-brand">
+          <div class="navbar-logo">⚡</div>
+          <span class="navbar-title">Hack<span>Track</span> · Judges</span>
+        </a>
+        <ul class="navbar-nav">
+          <li><span id="judge-name-nav" style="color:var(--text-muted); font-size:13px;"></span></li>
+          <li><a href="/leaderboard.html">Leaderboard</a></li>
+          <li><button onclick="doLogout()" class="btn btn-ghost btn-sm" style="font-size:12px;">Logout</button></li>
+        </ul>
+      </div>
+    </nav>
+
+    <div class="judge-layout">
+      <!-- Team Sidebar -->
+      <div class="judge-sidebar">
+        <div style="padding:12px 16px 8px;">
+          <div style="font-family:var(--font-mono); font-size:10px; color:var(--text-muted); text-transform:uppercase; letter-spacing:0.1em; margin-bottom:12px;">Assigned Teams</div>
+          <div style="display:flex; gap:8px; margin-bottom:12px; flex-wrap:wrap;">
+            <span id="teams-count" style="font-family:var(--font-mono); font-size:11px; background:var(--bg-elevated); padding:3px 10px; border-radius:10px; color:var(--text-muted);">—</span>
+            <span id="scored-count" style="font-family:var(--font-mono); font-size:11px; background:rgba(0,255,136,0.1); padding:3px 10px; border-radius:10px; color:var(--accent-green);">0 scored</span>
+          </div>
+        </div>
+        <div class="sidebar-search">
+          <input type="text" class="form-control" id="team-search" placeholder="Search teams..." oninput="filterTeams()" style="font-size:12px;">
+        </div>
+        <div class="team-list" id="team-list">
+          <div class="empty-state" style="padding:24px 0;"><div class="empty-state-icon">👥</div><div class="empty-state-text">Loading teams...</div></div>
+        </div>
+      </div>
+
+      <!-- Scoring Area -->
+      <div class="judge-main">
+
+        <!-- Empty state -->
+        <div id="empty-panel" style="display:flex; align-items:center; justify-content:center; height:400px; flex-direction:column; gap:16px;">
+          <div style="font-size:48px;">⚖️</div>
+          <h3 style="color:var(--text-primary);">Select a Team to Score</h3>
+          <p style="color:var(--text-secondary); font-size:13px; text-align:center; max-width:320px;">Choose a team from the left sidebar. Teams with a green border have already been scored.</p>
+        </div>
+
+        <!-- Score Panel -->
+        <div id="score-panel" class="score-panel">
+          <div class="score-form-wrap">
+
+            <div style="display:flex; align-items:flex-start; justify-content:space-between; margin-bottom:24px; flex-wrap:wrap; gap:12px;">
+              <div>
+                <div class="page-tag">Evaluation</div>
+                <h2 id="sp-team" style="color:var(--text-primary); font-size:1.6rem; margin-top:8px;">Team Name</h2>
+                <div id="sp-project" style="color:var(--text-secondary); font-size:13px; margin-top:4px;"></div>
+                <div id="sp-college" style="color:var(--text-muted); font-size:12px; margin-top:2px;"></div>
+              </div>
+              <div id="sp-badge"></div>
+            </div>
+
+            <div id="already-scored-notice" class="alert alert-info hidden">
+              ℹ️ You have already scored this team. Submitting again will update your previous score.
+            </div>
+
+            <!-- Scoring Criteria -->
+            <div class="criteria-grid">
+
+              <div class="score-field">
+                <div class="score-label-row">
+                  <span class="score-label">💡 Innovation</span>
+                  <span class="score-value-display" id="val-innovation">5</span>
+                </div>
+                <input type="range" min="0" max="10" value="5" step="0.5" id="slider-innovation" oninput="updateScore('innovation')">
+                <div style="display:flex; justify-content:space-between; font-family:var(--font-mono); font-size:10px; color:var(--text-muted); margin-top:4px;"><span>0</span><span>5</span><span>10</span></div>
+              </div>
+
+              <div class="score-field">
+                <div class="score-label-row">
+                  <span class="score-label">⚙️ Technical Complexity</span>
+                  <span class="score-value-display" id="val-technicalComplexity">5</span>
+                </div>
+                <input type="range" min="0" max="10" value="5" step="0.5" id="slider-technicalComplexity" oninput="updateScore('technicalComplexity')">
+                <div style="display:flex; justify-content:space-between; font-family:var(--font-mono); font-size:10px; color:var(--text-muted); margin-top:4px;"><span>0</span><span>5</span><span>10</span></div>
+              </div>
+
+              <div class="score-field">
+                <div class="score-label-row">
+                  <span class="score-label">🎤 Presentation</span>
+                  <span class="score-value-display" id="val-presentation">5</span>
+                </div>
+                <input type="range" min="0" max="10" value="5" step="0.5" id="slider-presentation" oninput="updateScore('presentation')">
+                <div style="display:flex; justify-content:space-between; font-family:var(--font-mono); font-size:10px; color:var(--text-muted); margin-top:4px;"><span>0</span><span>5</span><span>10</span></div>
+              </div>
+
+            </div>
+
+            <!-- Live Total -->
+            <div class="total-score-display">
+              <div class="total-label" style="margin-bottom:8px;">Average Score</div>
+              <div class="total-val" id="live-total" style="color:var(--accent-cyan);">5.0</div>
+              <div class="total-label" style="margin-top:4px;">out of 10</div>
+              <div class="score-breakdown">
+                <div class="breakdown-item"><div class="breakdown-val" id="b-innovation" style="color:var(--accent-purple);">5.0</div><div class="breakdown-label">Innovation</div></div>
+                <div class="breakdown-item"><div class="breakdown-val" id="b-tech" style="color:var(--accent-orange);">5.0</div><div class="breakdown-label">Technical</div></div>
+                <div class="breakdown-item"><div class="breakdown-val" id="b-pres" style="color:var(--accent-green);">5.0</div><div class="breakdown-label">Presentation</div></div>
+              </div>
+            </div>
+
+            <!-- Feedback -->
+            <div class="form-group">
+              <label class="form-label">Feedback / Notes <span style="color:var(--text-muted)">(optional)</span></label>
+              <textarea class="form-control" id="feedback" rows="3" placeholder="What stood out? Areas for improvement..."></textarea>
+            </div>
+
+            <button onclick="submitScore()" class="btn btn-success btn-lg" id="submit-score-btn" style="width:100%;">Submit Evaluation</button>
+          </div>
+        </div>
+
+      </div>
+    </div>
+  </div>
+
+  <div id="toast-container"></div>
+  <script src="/js/utils.js"></script>
+  <script>
+    let teams = [];
+    let currentTeamId = null;
+    let currentTeamScored = false;
+
+    // ── Login ──────────────────────────────────────────────────
+    document.addEventListener('DOMContentLoaded', async () => {
+      document.getElementById('login-password').addEventListener('keypress', e => { if (e.key === 'Enter') doLogin(); });
+      const user = auth.getUser();
+      if (user && auth.getToken()) {
+        const v = await auth.verify();
+        if (v && v.type === 'judge') { showJudgeUI(v.user); loadTeams(); return; }
+      }
+    });
+
+    async function doLogin() {
+      const email = document.getElementById('login-email').value.trim();
+      const password = document.getElementById('login-password').value;
+      if (!email || !password) return;
+      const btn = document.getElementById('login-btn');
+      btn.disabled = true; btn.textContent = 'Logging in...';
+      const data = await api.post('/auth/judge/login', { email, password });
+      btn.disabled = false; btn.textContent = 'Login as Judge';
+      if (data.success) {
+        auth.setToken(data.token, data.judge);
+        document.getElementById('login-overlay').style.display = 'none';
+        showJudgeUI(data.judge);
+        loadTeams();
+      } else {
+        const el = document.getElementById('login-error');
+        el.textContent = data.message; el.classList.remove('hidden');
+      }
+    }
+
+    function showJudgeUI(judge) {
+      document.getElementById('judge-ui').classList.remove('hidden');
+      document.getElementById('judge-name-nav').textContent = `👤 ${judge.name}`;
+    }
+
+    function doLogout() { auth.logout(); location.reload(); }
+
+    // ── Load Teams ─────────────────────────────────────────────
+    async function loadTeams() {
+      const data = await api.get('/judges/teams');
+      if (!data.success) { showToast('Failed to load teams', 'error'); return; }
+      teams = data.data;
+      const scored = teams.filter(t => t.alreadyScored).length;
+      document.getElementById('teams-count').textContent = `${teams.length} teams`;
+      document.getElementById('scored-count').textContent = `${scored} scored`;
+      renderTeamList(teams);
+    }
+
+    function renderTeamList(list) {
+      const container = document.getElementById('team-list');
+      if (!list.length) {
+        container.innerHTML = '<div class="empty-state" style="padding:24px 0;"><div class="empty-state-icon">📭</div><div class="empty-state-text">No checked-in teams yet</div></div>';
+        return;
+      }
+      container.innerHTML = list.map(t => `
+        <div class="team-item ${t.alreadyScored ? 'scored' : ''}" id="ti-${t._id}" onclick="selectTeam('${t._id}')">
+          <div class="team-name-label">${t.teamName || t.name}</div>
+          <div class="team-college">${t.college}</div>
+          ${t.projectTitle ? `<div class="team-college" style="color:var(--text-secondary)">${t.projectTitle}</div>` : ''}
+          ${t.alreadyScored ? '<div class="team-score-badge">✅ Scored</div>' : ''}
+        </div>`).join('');
+    }
+
+    function filterTeams() {
+      const q = document.getElementById('team-search').value.toLowerCase();
+      const filtered = teams.filter(t =>
+        (t.teamName || t.name || '').toLowerCase().includes(q) ||
+        (t.college || '').toLowerCase().includes(q) ||
+        (t.projectTitle || '').toLowerCase().includes(q)
+      );
+      renderTeamList(filtered);
+    }
+
+    function selectTeam(id) {
+      currentTeamId = id;
+      const team = teams.find(t => t._id === id);
+      if (!team) return;
+      currentTeamScored = team.alreadyScored;
+
+      document.querySelectorAll('.team-item').forEach(el => el.classList.remove('active'));
+      document.getElementById(`ti-${id}`)?.classList.add('active');
+
+      // Fill panel
+      document.getElementById('sp-team').textContent    = team.teamName || team.name;
+      document.getElementById('sp-project').textContent = team.projectTitle ? `📌 ${team.projectTitle}` : '';
+      document.getElementById('sp-college').textContent = `🏫 ${team.college}`;
+      document.getElementById('sp-badge').innerHTML     = statusBadge(team.alreadyScored ? 'approved' : 'pending', false);
+
+      const notice = document.getElementById('already-scored-notice');
+      if (team.alreadyScored) notice.classList.remove('hidden');
+      else notice.classList.add('hidden');
+
+      // Reset sliders
+      ['innovation','technicalComplexity','presentation'].forEach(f => {
+        document.getElementById(`slider-${f}`).value = 5;
+        document.getElementById(`val-${f}`).textContent = '5';
+      });
+      document.getElementById('feedback').value = '';
+      updateLiveTotal();
+
+      document.getElementById('submit-score-btn').textContent = team.alreadyScored ? 'Update Evaluation' : 'Submit Evaluation';
+
+      document.getElementById('empty-panel').style.display = 'none';
+      document.getElementById('score-panel').style.display = 'block';
+    }
+
+    function updateScore(field) {
+      const val = parseFloat(document.getElementById(`slider-${field}`).value);
+      document.getElementById(`val-${field}`).textContent = val.toFixed(1);
+      updateLiveTotal();
+    }
+
+    function updateLiveTotal() {
+      const i = parseFloat(document.getElementById('slider-innovation').value);
+      const t = parseFloat(document.getElementById('slider-technicalComplexity').value);
+      const p = parseFloat(document.getElementById('slider-presentation').value);
+      const total = ((i + t + p) / 3).toFixed(1);
+      document.getElementById('live-total').textContent = total;
+      document.getElementById('b-innovation').textContent = i.toFixed(1);
+      document.getElementById('b-tech').textContent = t.toFixed(1);
+      document.getElementById('b-pres').textContent = p.toFixed(1);
+
+      // Color the total
+      const color = total >= 8 ? 'var(--accent-green)' : total >= 5 ? 'var(--accent-cyan)' : 'var(--accent-orange)';
+      document.getElementById('live-total').style.color = color;
+    }
+
+    async function submitScore() {
+      if (!currentTeamId) return;
+
+      const innovation          = parseFloat(document.getElementById('slider-innovation').value);
+      const technicalComplexity = parseFloat(document.getElementById('slider-technicalComplexity').value);
+      const presentation        = parseFloat(document.getElementById('slider-presentation').value);
+      const feedback            = document.getElementById('feedback').value.trim();
+
+      const btn = document.getElementById('submit-score-btn');
+      btn.disabled = true; btn.textContent = 'Submitting...';
+
+      let data;
+      if (currentTeamScored) {
+        data = await api.put(`/judges/score/${currentTeamId}`, { innovation, technicalComplexity, presentation, feedback });
+      } else {
+        data = await api.post('/judges/score', { participantId: currentTeamId, innovation, technicalComplexity, presentation, feedback });
+      }
+
+      btn.disabled = false;
+
+      if (data.success) {
+        showToast('✅ Score submitted successfully!', 'success');
+        // Update local state
+        const team = teams.find(t => t._id === currentTeamId);
+        if (team) team.alreadyScored = true;
+        renderTeamList(teams);
+        document.getElementById(`ti-${currentTeamId}`)?.classList.add('active', 'scored');
+        currentTeamScored = true;
+        btn.textContent = 'Update Evaluation';
+        document.getElementById('already-scored-notice').classList.remove('hidden');
+        const scored = teams.filter(t => t.alreadyScored).length;
+        document.getElementById('scored-count').textContent = `${scored} scored`;
+      } else {
+        showToast(data.message || 'Failed to submit score', 'error');
+        btn.textContent = 'Submit Evaluation';
+      }
+    }
+  </script>
+</body>
+</html>

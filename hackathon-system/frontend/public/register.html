@@ -1,0 +1,321 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Register — HackTrack</title>
+  <link rel="stylesheet" href="/css/style.css">
+  <style>
+    .register-wrap {
+      display: grid;
+      grid-template-columns: 1fr 400px;
+      gap: 32px;
+      align-items: start;
+    }
+    @media(max-width: 900px) {
+      .register-wrap { grid-template-columns: 1fr; }
+      .register-side { order: -1; }
+    }
+    .register-side {
+      position: sticky;
+      top: 80px;
+    }
+    .info-list {
+      list-style: none;
+      display: flex;
+      flex-direction: column;
+      gap: 12px;
+      margin-top: 8px;
+    }
+    .info-list li {
+      display: flex;
+      align-items: flex-start;
+      gap: 12px;
+      font-size: 13px;
+      color: var(--text-secondary);
+      line-height: 1.5;
+    }
+    .info-list .icon {
+      color: var(--accent-cyan);
+      font-size: 16px;
+      margin-top: 1px;
+      flex-shrink: 0;
+    }
+    .success-card {
+      text-align: center;
+      padding: 40px 24px;
+    }
+    .success-icon {
+      font-size: 64px;
+      margin-bottom: 16px;
+    }
+    .success-reg-id {
+      font-family: var(--font-mono);
+      font-size: 1.4rem;
+      font-weight: 700;
+      color: var(--accent-cyan);
+      letter-spacing: 0.12em;
+      background: rgba(0,212,255,0.1);
+      border: 1px solid rgba(0,212,255,0.2);
+      padding: 12px 24px;
+      border-radius: var(--radius-md);
+      display: inline-block;
+      margin: 16px 0;
+    }
+  </style>
+</head>
+<body>
+
+  <nav class="navbar">
+    <div class="navbar-inner">
+      <a href="/" class="navbar-brand">
+        <div class="navbar-logo">⚡</div>
+        <span class="navbar-title">Hack<span>Track</span></span>
+      </a>
+      <ul class="navbar-nav">
+        <li><a href="/register.html" class="active">Register</a></li>
+        <li><a href="/status.html">My Status</a></li>
+        <li><a href="/leaderboard.html">Leaderboard</a></li>
+      </ul>
+    </div>
+  </nav>
+
+  <div class="container" style="padding-top:32px; padding-bottom:60px; position:relative; z-index:1;">
+
+    <div class="page-header">
+      <div class="page-tag">Participant Registration</div>
+      <h1>Join the Hackathon</h1>
+      <p>Fill in your details and upload ID proof. You'll receive a QR code after admin approval.</p>
+    </div>
+
+    <!-- Success State (hidden by default) -->
+    <div id="success-state" class="card hidden">
+      <div class="success-card">
+        <div class="success-icon">🎉</div>
+        <h2 style="color:var(--accent-green); font-size:1.8rem; margin-bottom:8px;">Registration Successful!</h2>
+        <p style="color:var(--text-secondary); margin-bottom:16px;">Your registration has been submitted and is pending admin review.</p>
+        <div class="success-reg-id" id="success-reg-id">—</div>
+        <p style="color:var(--text-muted); font-size:12px; margin-bottom:24px;">Save this Registration ID to check your status</p>
+        <div style="display:flex; gap:12px; justify-content:center; flex-wrap:wrap;">
+          <a href="/status.html" class="btn btn-primary">Check My Status</a>
+          <button onclick="resetForm()" class="btn btn-ghost">Register Another</button>
+        </div>
+      </div>
+    </div>
+
+    <div id="form-state" class="register-wrap">
+
+      <!-- Form -->
+      <div class="card">
+        <div class="card-title">📝 Registration Form</div>
+
+        <div id="form-error" class="alert alert-error hidden"></div>
+
+        <form id="registration-form" novalidate>
+
+          <div class="form-grid">
+            <div class="form-group">
+              <label class="form-label">Full Name <span class="required">*</span></label>
+              <input type="text" class="form-control" id="name" name="name" placeholder="e.g. Arjun Sharma" required>
+              <div class="field-error" id="err-name"></div>
+            </div>
+            <div class="form-group">
+              <label class="form-label">Email Address <span class="required">*</span></label>
+              <input type="email" class="form-control" id="email" name="email" placeholder="you@college.edu" required>
+              <div class="field-error" id="err-email"></div>
+            </div>
+          </div>
+
+          <div class="form-grid">
+            <div class="form-group">
+              <label class="form-label">Phone Number <span class="required">*</span></label>
+              <input type="tel" class="form-control" id="phone" name="phone" placeholder="10-digit mobile" maxlength="10" required>
+              <div class="field-error" id="err-phone"></div>
+            </div>
+            <div class="form-group">
+              <label class="form-label">College / University <span class="required">*</span></label>
+              <input type="text" class="form-control" id="college" name="college" placeholder="Your institution name" required>
+              <div class="field-error" id="err-college"></div>
+            </div>
+          </div>
+
+          <div class="form-grid">
+            <div class="form-group">
+              <label class="form-label">Team Name <span style="color:var(--text-muted)">(optional)</span></label>
+              <input type="text" class="form-control" id="teamName" name="teamName" placeholder="e.g. CodeCrafters">
+            </div>
+            <div class="form-group">
+              <label class="form-label">Project Title <span style="color:var(--text-muted)">(optional)</span></label>
+              <input type="text" class="form-control" id="projectTitle" name="projectTitle" placeholder="e.g. AI Traffic Monitor">
+            </div>
+          </div>
+
+          <div class="form-group">
+            <label class="form-label">ID Proof <span class="required">*</span> <span style="color:var(--text-muted); font-size:10px;">(JPG, PNG, PDF · max 5MB)</span></label>
+            <label class="file-upload" id="file-upload-label" for="idProof">
+              <input type="file" id="idProof" name="idProof" accept=".jpg,.jpeg,.png,.pdf" required>
+              <div class="file-upload-icon" id="file-icon">📎</div>
+              <div class="file-upload-text" id="file-text">
+                <span>Click to upload</span> or drag and drop your ID proof
+              </div>
+              <div style="font-size:11px; color:var(--text-muted); margin-top:4px;">College ID, Aadhar, PAN, or Passport</div>
+            </label>
+            <div class="field-error" id="err-idProof"></div>
+          </div>
+
+          <!-- Terms -->
+          <div style="display:flex; align-items:flex-start; gap:10px; margin-bottom:24px;">
+            <input type="checkbox" id="terms" style="margin-top:3px; accent-color:var(--accent-cyan);" required>
+            <label for="terms" style="font-size:12px; color:var(--text-secondary); cursor:pointer;">
+              I confirm that all provided information is accurate and I agree to the hackathon rules and code of conduct.
+            </label>
+          </div>
+
+          <button type="submit" class="btn btn-primary btn-full btn-lg" id="submit-btn">
+            <span id="submit-text">Submit Registration</span>
+          </button>
+
+        </form>
+      </div>
+
+      <!-- Sidebar -->
+      <div class="register-side">
+        <div class="card mb-16">
+          <div class="card-title">📌 What Happens Next?</div>
+          <ul class="info-list">
+            <li><span class="icon">1️⃣</span><span>Your registration will be reviewed by the admin team within 24 hours.</span></li>
+            <li><span class="icon">2️⃣</span><span>Once approved, a unique QR code will be generated for you.</span></li>
+            <li><span class="icon">3️⃣</span><span>Check your status using your email on the <a href="/status.html" style="color:var(--accent-cyan);">Status page</a>.</span></li>
+            <li><span class="icon">4️⃣</span><span>Show your QR code at the venue entry for quick check-in.</span></li>
+          </ul>
+        </div>
+
+        <div class="card">
+          <div class="card-title">🔒 Security Note</div>
+          <p style="font-size:12px; color:var(--text-secondary); line-height:1.6;">
+            Your personal data is encrypted and stored securely. Your QR code contains a JWT token that expires after 24 hours. All entry attempts are logged.
+          </p>
+          <div style="margin-top:16px; padding:12px; background:var(--bg-elevated); border-radius:var(--radius-md); font-family:var(--font-mono); font-size:11px; color:var(--text-muted);">
+            <div style="color:var(--accent-green); margin-bottom:4px;">● SECURE CONNECTION</div>
+            <div>QR • JWT • MongoDB Encrypted</div>
+          </div>
+        </div>
+      </div>
+
+    </div>
+  </div>
+
+  <div id="toast-container"></div>
+  <script src="/js/utils.js"></script>
+  <script>
+    // File upload drag & drop
+    const fileInput = document.getElementById('idProof');
+    const fileLabel = document.getElementById('file-upload-label');
+    const fileIcon  = document.getElementById('file-icon');
+    const fileText  = document.getElementById('file-text');
+
+    fileInput.addEventListener('change', () => {
+      if (fileInput.files[0]) {
+        fileIcon.textContent = '✅';
+        fileText.innerHTML = `<span style="color:var(--accent-green)">${fileInput.files[0].name}</span>`;
+      }
+    });
+
+    ['dragover', 'dragenter'].forEach(e => {
+      fileLabel.addEventListener(e, (ev) => { ev.preventDefault(); fileLabel.classList.add('drag-over'); });
+    });
+    ['dragleave', 'drop'].forEach(e => {
+      fileLabel.addEventListener(e, (ev) => { ev.preventDefault(); fileLabel.classList.remove('drag-over'); });
+    });
+    fileLabel.addEventListener('drop', (e) => {
+      const file = e.dataTransfer.files[0];
+      if (file) {
+        const dt = new DataTransfer();
+        dt.items.add(file);
+        fileInput.files = dt.files;
+        fileIcon.textContent = '✅';
+        fileText.innerHTML = `<span style="color:var(--accent-green)">${file.name}</span>`;
+      }
+    });
+
+    // Field error helper
+    function setError(id, msg) {
+      const el = document.getElementById('err-' + id);
+      if (el) {
+        el.textContent = msg || '';
+        el.style.color = 'var(--accent-red)';
+        el.style.fontSize = '11px';
+        el.style.marginTop = '4px';
+      }
+    }
+    function clearErrors() {
+      document.querySelectorAll('.field-error').forEach(e => e.textContent = '');
+      document.getElementById('form-error').classList.add('hidden');
+    }
+
+    // Validate
+    function validate() {
+      clearErrors();
+      let valid = true;
+
+      const name = document.getElementById('name').value.trim();
+      const email = document.getElementById('email').value.trim();
+      const phone = document.getElementById('phone').value.trim();
+      const college = document.getElementById('college').value.trim();
+      const terms = document.getElementById('terms').checked;
+
+      if (!name || name.length < 2)   { setError('name', 'Name must be at least 2 characters'); valid = false; }
+      if (!email || !/\S+@\S+\.\S+/.test(email)) { setError('email', 'Enter a valid email address'); valid = false; }
+      if (!phone || !/^[6-9]\d{9}$/.test(phone)) { setError('phone', 'Enter a valid 10-digit phone number'); valid = false; }
+      if (!college)                   { setError('college', 'College name is required'); valid = false; }
+      if (!fileInput.files[0])        { setError('idProof', 'Please upload your ID proof'); valid = false; }
+      if (!terms)                     { showToast('Please accept the terms to continue', 'warning'); valid = false; }
+
+      return valid;
+    }
+
+    // Submit
+    document.getElementById('registration-form').addEventListener('submit', async (e) => {
+      e.preventDefault();
+      if (!validate()) return;
+
+      const btn = document.getElementById('submit-btn');
+      const btnText = document.getElementById('submit-text');
+      btn.disabled = true;
+      btnText.textContent = 'Submitting...';
+
+      try {
+        const formData = new FormData(e.target);
+        const data = await api.post('/participants/register', formData, true);
+
+        if (data.success) {
+          document.getElementById('form-state').classList.add('hidden');
+          const successState = document.getElementById('success-state');
+          successState.classList.remove('hidden');
+          document.getElementById('success-reg-id').textContent = data.data.registrationId;
+          showToast('Registration submitted successfully!', 'success');
+        } else {
+          const errDiv = document.getElementById('form-error');
+          errDiv.textContent = data.message || 'Registration failed. Please try again.';
+          errDiv.classList.remove('hidden');
+          showToast(data.message || 'Registration failed', 'error');
+        }
+      } catch (err) {
+        showToast('Network error. Please try again.', 'error');
+      } finally {
+        btn.disabled = false;
+        btnText.textContent = 'Submit Registration';
+      }
+    });
+
+    function resetForm() {
+      document.getElementById('registration-form').reset();
+      fileIcon.textContent = '📎';
+      fileText.innerHTML = '<span>Click to upload</span> or drag and drop your ID proof';
+      document.getElementById('success-state').classList.add('hidden');
+      document.getElementById('form-state').classList.remove('hidden');
+      clearErrors();
+    }
+  </script>
+</body>
+</html>

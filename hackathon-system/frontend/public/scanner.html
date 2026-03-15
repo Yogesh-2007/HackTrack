@@ -1,0 +1,361 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>QR Scanner — HackTrack</title>
+  <link rel="stylesheet" href="/css/style.css">
+  <!-- jsQR library for QR decoding -->
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/jsqr/1.4.0/jsQR.min.js"></script>
+  <style>
+    .scanner-page { max-width: 800px; margin: 0 auto; padding: 32px 16px 60px; position: relative; z-index: 1; }
+    .scanner-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 24px; }
+    @media(max-width: 700px) { .scanner-grid { grid-template-columns: 1fr; } }
+    #video-element { width: 100%; display: block; background: #000; }
+    canvas#scan-canvas { display: none; }
+    .scanner-controls { display: flex; gap: 8px; margin-top: 12px; flex-wrap: wrap; }
+    .scan-log {
+      max-height: 320px;
+      overflow-y: auto;
+      display: flex;
+      flex-direction: column;
+      gap: 8px;
+    }
+    .scan-log-item {
+      padding: 10px 14px;
+      border-radius: var(--radius-md);
+      font-size: 12px;
+      border: 1px solid;
+      display: flex;
+      align-items: flex-start;
+      gap: 10px;
+    }
+    .scan-log-item.success { background: rgba(0,255,136,0.06); border-color: rgba(0,255,136,0.2); }
+    .scan-log-item.duplicate { background: rgba(251,191,36,0.06); border-color: rgba(251,191,36,0.2); }
+    .scan-log-item.error { background: rgba(255,71,87,0.06); border-color: rgba(255,71,87,0.2); }
+    .scan-log-icon { font-size: 16px; flex-shrink: 0; margin-top: 1px; }
+    .scan-log-name { font-weight: 600; color: var(--text-primary); }
+    .scan-log-detail { color: var(--text-muted); margin-top: 2px; }
+    .scan-log-time { font-family: var(--font-mono); font-size: 10px; color: var(--text-muted); margin-left: auto; flex-shrink: 0; }
+    .volunteer-name-row { display: flex; align-items: center; gap: 12px; margin-bottom: 16px; flex-wrap: wrap; }
+    .manual-input-row { display: flex; gap: 8px; }
+    .counter-row { display: flex; gap: 16px; margin-bottom: 16px; flex-wrap: wrap; }
+    .counter-box {
+      background: var(--bg-elevated);
+      border: 1px solid var(--border);
+      border-radius: var(--radius-md);
+      padding: 10px 16px;
+      text-align: center;
+      flex: 1; min-width: 90px;
+    }
+    .counter-val { font-family: var(--font-display); font-size: 1.6rem; font-weight: 700; }
+    .counter-label { font-family: var(--font-mono); font-size: 10px; color: var(--text-muted); text-transform: uppercase; letter-spacing: 0.08em; }
+    #big-result {
+      position: fixed;
+      top: 50%; left: 50%;
+      transform: translate(-50%, -50%);
+      z-index: 8000;
+      width: 300px;
+      text-align: center;
+      padding: 32px;
+      border-radius: var(--radius-xl);
+      pointer-events: none;
+      display: none;
+    }
+    #big-result.show { display: block; animation: popIn 0.3s ease; }
+    #big-result.success { background: rgba(0,255,136,0.15); border: 2px solid var(--accent-green); backdrop-filter: blur(8px); }
+    #big-result.error   { background: rgba(255,71,87,0.15);  border: 2px solid var(--accent-red);   backdrop-filter: blur(8px); }
+    #big-result.dup     { background: rgba(251,191,36,0.15); border: 2px solid var(--accent-yellow); backdrop-filter: blur(8px); }
+    #big-result .big-icon { font-size: 56px; }
+    #big-result .big-name { font-family: var(--font-display); font-size: 1.4rem; font-weight: 700; color: var(--text-primary); margin-top: 8px; }
+    #big-result .big-detail { color: var(--text-secondary); font-size: 13px; margin-top: 4px; }
+  </style>
+</head>
+<body>
+
+  <nav class="navbar">
+    <div class="navbar-inner">
+      <a href="/" class="navbar-brand">
+        <div class="navbar-logo">⚡</div>
+        <span class="navbar-title">Hack<span>Track</span></span>
+      </a>
+      <ul class="navbar-nav">
+        <li><a href="/admin.html">Admin</a></li>
+        <li><a href="/leaderboard.html">Leaderboard</a></li>
+      </ul>
+    </div>
+  </nav>
+
+  <!-- Big scan result flash -->
+  <div id="big-result">
+    <div class="big-icon" id="big-icon">✅</div>
+    <div class="big-name" id="big-name"></div>
+    <div class="big-detail" id="big-detail"></div>
+  </div>
+
+  <div class="scanner-page">
+    <div class="page-header">
+      <div class="page-tag">Volunteer Station</div>
+      <h1>QR Entry Scanner</h1>
+      <p>Scan participant QR codes to check them in. Each QR can only be used once.</p>
+    </div>
+
+    <!-- Volunteer Name -->
+    <div class="volunteer-name-row">
+      <div style="flex:1; max-width:280px;">
+        <input type="text" class="form-control" id="volunteer-name" placeholder="Your name (Volunteer/Staff)" value="Volunteer">
+      </div>
+      <div style="font-family:var(--font-mono); font-size:11px; color:var(--text-muted);">Logged scans will show your name</div>
+    </div>
+
+    <!-- Counters -->
+    <div class="counter-row">
+      <div class="counter-box">
+        <div class="counter-val" id="cnt-checkins" style="color:var(--accent-green);">0</div>
+        <div class="counter-label">Checked In</div>
+      </div>
+      <div class="counter-box">
+        <div class="counter-val" id="cnt-dups" style="color:var(--accent-yellow);">0</div>
+        <div class="counter-label">Duplicates</div>
+      </div>
+      <div class="counter-box">
+        <div class="counter-val" id="cnt-errors" style="color:var(--accent-red);">0</div>
+        <div class="counter-label">Invalid</div>
+      </div>
+    </div>
+
+    <div class="scanner-grid">
+
+      <!-- Camera Scanner -->
+      <div>
+        <div class="card" style="padding:16px;">
+          <div class="card-title">📷 Camera Scanner</div>
+          <div class="scanner-video-wrap">
+            <video id="video-element" autoplay playsinline muted></video>
+            <div class="scanner-overlay">
+              <div class="scanner-frame">
+                <div class="scanner-line"></div>
+              </div>
+            </div>
+          </div>
+          <canvas id="scan-canvas"></canvas>
+          <div class="scanner-controls">
+            <button onclick="startCamera()" class="btn btn-primary btn-sm" id="start-btn">▶ Start Camera</button>
+            <button onclick="stopCamera()" class="btn btn-ghost btn-sm" id="stop-btn" disabled>⏹ Stop</button>
+            <button onclick="toggleFlash()" class="btn btn-ghost btn-sm" id="flash-btn" disabled>🔦 Flash</button>
+          </div>
+          <div style="font-size:11px; color:var(--text-muted); margin-top:8px;" id="camera-status">Camera not started. Click "Start Camera" to begin.</div>
+        </div>
+
+        <!-- Manual Token Input -->
+        <div class="card" style="margin-top:16px;">
+          <div class="card-title">⌨️ Manual Token Input</div>
+          <p style="color:var(--text-secondary); font-size:12px; margin-bottom:12px;">Paste a QR token manually if camera is unavailable.</p>
+          <div class="manual-input-row">
+            <input type="text" class="form-control" id="manual-token" placeholder="Paste JWT token here...">
+            <button onclick="manualScan()" class="btn btn-primary btn-sm">Scan</button>
+          </div>
+        </div>
+      </div>
+
+      <!-- Scan Log -->
+      <div>
+        <div class="card" style="height:fit-content;">
+          <div class="section-header">
+            <div class="card-title" style="margin-bottom:0;">📋 Scan Log</div>
+            <button onclick="clearLog()" class="btn btn-ghost btn-sm" style="font-size:11px;">Clear</button>
+          </div>
+          <div class="scan-log" id="scan-log">
+            <div class="empty-state" id="log-empty">
+              <div class="empty-state-icon">📭</div>
+              <div class="empty-state-text">No scans yet</div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+    </div>
+  </div>
+
+  <div id="toast-container"></div>
+  <script src="/js/utils.js"></script>
+  <script>
+    let videoStream = null;
+    let scanInterval = null;
+    let lastScannedToken = null;
+    let lastScanTime = 0;
+    let cntCheckins = 0, cntDups = 0, cntErrors = 0;
+    let flashTrack = null;
+    let flashOn = false;
+
+    const video   = document.getElementById('video-element');
+    const canvas  = document.getElementById('scan-canvas');
+    const ctx     = canvas.getContext('2d');
+
+    async function startCamera() {
+      try {
+        const constraints = {
+          video: {
+            facingMode: { ideal: 'environment' },
+            width: { ideal: 640 }, height: { ideal: 480 }
+          }
+        };
+        videoStream = await navigator.mediaDevices.getUserMedia(constraints);
+        video.srcObject = videoStream;
+
+        const track = videoStream.getVideoTracks()[0];
+        flashTrack = track;
+        const caps = track.getCapabilities ? track.getCapabilities() : {};
+        document.getElementById('flash-btn').disabled = !caps.torch;
+
+        document.getElementById('start-btn').disabled = true;
+        document.getElementById('stop-btn').disabled = false;
+        document.getElementById('camera-status').textContent = '🟢 Camera active — scanning...';
+
+        scanInterval = setInterval(scanFrame, 250);
+      } catch (err) {
+        document.getElementById('camera-status').textContent = `❌ Camera error: ${err.message}`;
+        showToast('Camera access denied or unavailable.', 'error');
+      }
+    }
+
+    function stopCamera() {
+      if (videoStream) { videoStream.getTracks().forEach(t => t.stop()); videoStream = null; }
+      if (scanInterval) { clearInterval(scanInterval); scanInterval = null; }
+      video.srcObject = null;
+      document.getElementById('start-btn').disabled = false;
+      document.getElementById('stop-btn').disabled = true;
+      document.getElementById('flash-btn').disabled = true;
+      document.getElementById('camera-status').textContent = 'Camera stopped.';
+    }
+
+    async function toggleFlash() {
+      if (!flashTrack) return;
+      flashOn = !flashOn;
+      try {
+        await flashTrack.applyConstraints({ advanced: [{ torch: flashOn }] });
+        document.getElementById('flash-btn').textContent = flashOn ? '🔦 Flash OFF' : '🔦 Flash';
+      } catch { showToast('Flash not supported on this device.', 'warning'); }
+    }
+
+    function scanFrame() {
+      if (!video.videoWidth) return;
+      canvas.width  = video.videoWidth;
+      canvas.height = video.videoHeight;
+      ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
+      const imageData = ctx.getImageData(0, 0, canvas.width, canvas.height);
+      const code = jsQR(imageData.data, imageData.width, imageData.height, { inversionAttempts: 'dontInvert' });
+
+      if (code) {
+        const now = Date.now();
+        // Throttle: same token can't be re-scanned within 5 seconds
+        if (code.data === lastScannedToken && now - lastScanTime < 5000) return;
+        lastScannedToken = code.data;
+        lastScanTime = now;
+        processToken(code.data);
+      }
+    }
+
+    function manualScan() {
+      const token = document.getElementById('manual-token').value.trim();
+      if (!token) { showToast('Please paste a token first.', 'warning'); return; }
+      processToken(token);
+      document.getElementById('manual-token').value = '';
+    }
+
+    document.getElementById('manual-token').addEventListener('keypress', e => {
+      if (e.key === 'Enter') manualScan();
+    });
+
+    async function processToken(token) {
+      const volunteerName = document.getElementById('volunteer-name').value.trim() || 'Volunteer';
+
+      try {
+        const data = await api.post('/qr/scan', { token, scannedBy: volunteerName });
+        handleScanResult(data);
+      } catch (err) {
+        handleScanResult({ success: false, type: 'error', message: 'Network error. Try again.' });
+      }
+    }
+
+    function handleScanResult(data) {
+      if (data.success) {
+        // Successful check-in
+        cntCheckins++;
+        document.getElementById('cnt-checkins').textContent = cntCheckins;
+        addLog('success', '✅', data.data.name, `${data.data.registrationId} · ${data.data.college}`);
+        flashBigResult('success', '✅', data.data.name, data.data.teamName ? `Team: ${data.data.teamName}` : data.data.college);
+        showToast(`✅ ${data.message}`, 'success', 3000);
+        playBeep(true);
+      } else if (data.type === 'duplicate') {
+        cntDups++;
+        document.getElementById('cnt-dups').textContent = cntDups;
+        addLog('duplicate', '⚠️', 'DUPLICATE SCAN', data.message);
+        flashBigResult('dup', '⚠️', 'Already Checked In', data.message);
+        showToast(data.message, 'warning');
+        playBeep(false);
+      } else {
+        cntErrors++;
+        document.getElementById('cnt-errors').textContent = cntErrors;
+        const msg = data.message || 'Invalid QR code';
+        addLog('error', '❌', 'INVALID QR', msg);
+        flashBigResult('error', '❌', 'Invalid QR', msg);
+        showToast(msg, 'error');
+        playBeep(false);
+      }
+    }
+
+    function addLog(type, icon, name, detail) {
+      document.getElementById('log-empty')?.remove();
+      const log = document.getElementById('scan-log');
+      const time = new Date().toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit', second: '2-digit' });
+      const item = document.createElement('div');
+      item.className = `scan-log-item ${type}`;
+      item.innerHTML = `
+        <span class="scan-log-icon">${icon}</span>
+        <div style="flex:1; min-width:0;">
+          <div class="scan-log-name">${name}</div>
+          <div class="scan-log-detail">${detail}</div>
+        </div>
+        <span class="scan-log-time">${time}</span>`;
+      log.prepend(item);
+    }
+
+    function clearLog() {
+      const log = document.getElementById('scan-log');
+      log.innerHTML = '<div class="empty-state" id="log-empty"><div class="empty-state-icon">📭</div><div class="empty-state-text">No scans yet</div></div>';
+      cntCheckins = 0; cntDups = 0; cntErrors = 0;
+      document.getElementById('cnt-checkins').textContent = 0;
+      document.getElementById('cnt-dups').textContent = 0;
+      document.getElementById('cnt-errors').textContent = 0;
+    }
+
+    function flashBigResult(type, icon, name, detail) {
+      const el = document.getElementById('big-result');
+      el.className = `show ${type}`;
+      document.getElementById('big-icon').textContent = icon;
+      document.getElementById('big-name').textContent = name;
+      document.getElementById('big-detail').textContent = detail;
+      setTimeout(() => { el.className = ''; el.style.display = 'none'; }, 2500);
+    }
+
+    function playBeep(success) {
+      try {
+        const ctx = new (window.AudioContext || window.webkitAudioContext)();
+        const osc = ctx.createOscillator();
+        const gain = ctx.createGain();
+        osc.connect(gain); gain.connect(ctx.destination);
+        osc.frequency.value = success ? 880 : 330;
+        osc.type = success ? 'sine' : 'sawtooth';
+        gain.gain.setValueAtTime(0.3, ctx.currentTime);
+        gain.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + 0.3);
+        osc.start(ctx.currentTime);
+        osc.stop(ctx.currentTime + 0.3);
+      } catch {}
+    }
+
+    // Cleanup on page leave
+    window.addEventListener('beforeunload', stopCamera);
+  </script>
+</body>
+</html>

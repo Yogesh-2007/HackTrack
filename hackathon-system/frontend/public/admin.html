@@ -1,0 +1,589 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Admin Panel — HackTrack</title>
+  <link rel="stylesheet" href="/css/style.css">
+  <style>
+    .admin-layout { display: grid; grid-template-columns: 220px 1fr; gap: 0; min-height: calc(100vh - 60px); }
+    .sidebar {
+      background: var(--bg-card);
+      border-right: 1px solid var(--border);
+      padding: 24px 0;
+      position: sticky; top: 60px; height: calc(100vh - 60px); overflow-y: auto;
+    }
+    .sidebar-section { padding: 0 12px; margin-bottom: 8px; }
+    .sidebar-label { font-family: var(--font-mono); font-size: 10px; color: var(--text-muted); text-transform: uppercase; letter-spacing: 0.1em; padding: 4px 12px; margin-bottom: 4px; }
+    .sidebar-item {
+      display: flex; align-items: center; gap: 10px;
+      padding: 10px 12px; border-radius: var(--radius-md);
+      font-family: var(--font-display); font-size: 13px; font-weight: 600;
+      letter-spacing: 0.04em; color: var(--text-secondary);
+      cursor: pointer; transition: var(--transition);
+      border: none; background: none; width: 100%; text-align: left;
+      text-transform: uppercase;
+    }
+    .sidebar-item:hover { background: var(--bg-hover); color: var(--text-primary); }
+    .sidebar-item.active { background: rgba(0,212,255,0.1); color: var(--accent-cyan); }
+    .sidebar-item .count {
+      margin-left: auto; background: var(--bg-elevated);
+      font-family: var(--font-mono); font-size: 10px;
+      padding: 2px 7px; border-radius: 10px; color: var(--text-muted);
+    }
+    .sidebar-item.active .count { background: rgba(0,212,255,0.15); color: var(--accent-cyan); }
+    .main-area { padding: 28px 32px; overflow-y: auto; }
+    @media(max-width:768px) {
+      .admin-layout { grid-template-columns: 1fr; }
+      .sidebar { position: static; height: auto; display: flex; flex-wrap: wrap; gap: 4px; padding: 12px; border-right: none; border-bottom: 1px solid var(--border); }
+      .sidebar-label, .sidebar-section { display: none; }
+      .sidebar-item { padding: 8px 12px; font-size: 11px; }
+      .main-area { padding: 16px; }
+    }
+    .participant-row td { vertical-align: middle; }
+    .action-btns { display: flex; gap: 6px; flex-wrap: wrap; }
+    .view-img-btn { font-size: 11px; padding: 3px 8px; background: var(--bg-elevated); border: 1px solid var(--border); border-radius: var(--radius-sm); color: var(--text-secondary); cursor: pointer; transition: var(--transition); }
+    .view-img-btn:hover { color: var(--accent-cyan); border-color: var(--accent-cyan); }
+    .login-overlay {
+      position: fixed; inset: 0;
+      background: var(--bg-deep);
+      z-index: 9999;
+      display: flex; align-items: center; justify-content: center;
+    }
+    .login-card { max-width: 420px; width: 100%; margin: 0 16px; }
+    .admin-name-badge {
+      display: flex; align-items: center; gap: 8px;
+      padding: 12px 16px; background: var(--bg-elevated);
+      border: 1px solid var(--border); border-radius: var(--radius-md);
+      margin: 0 12px 16px; font-size: 13px;
+    }
+    .admin-avatar {
+      width: 28px; height: 28px; background: linear-gradient(135deg, var(--accent-cyan), var(--accent-purple));
+      border-radius: 50%; display: flex; align-items: center; justify-content: center;
+      font-size: 12px; font-weight: 700; color: var(--bg-deep);
+    }
+  </style>
+</head>
+<body>
+
+  <!-- Login Overlay -->
+  <div id="login-overlay" class="login-overlay">
+    <div class="login-card card">
+      <div style="text-align:center; margin-bottom:24px;">
+        <div style="font-size:36px; margin-bottom:8px;">🔐</div>
+        <h2 style="color:var(--text-primary); font-size:1.6rem;">Admin Login</h2>
+        <p style="color:var(--text-secondary); font-size:13px; margin-top:4px;">HackTrack Management System</p>
+      </div>
+      <div id="login-error" class="alert alert-error hidden"></div>
+      <div class="form-group">
+        <label class="form-label">Email</label>
+        <input type="email" class="form-control" id="login-email" placeholder="admin@hackathon.com">
+      </div>
+      <div class="form-group">
+        <label class="form-label">Password</label>
+        <input type="password" class="form-control" id="login-password" placeholder="••••••••">
+      </div>
+      <button onclick="doLogin()" class="btn btn-primary btn-full" id="login-btn">Login to Admin Panel</button>
+      <p style="text-align:center; color:var(--text-muted); font-size:11px; margin-top:16px;">Default: admin@hackathon.com / Admin@123456</p>
+    </div>
+  </div>
+
+  <!-- Main Admin UI -->
+  <div id="admin-ui" class="hidden">
+
+    <nav class="navbar">
+      <div class="navbar-inner">
+        <a href="/" class="navbar-brand">
+          <div class="navbar-logo">⚡</div>
+          <span class="navbar-title">Hack<span>Track</span> · Admin</span>
+        </a>
+        <ul class="navbar-nav">
+          <li><a href="/scanner.html">Scanner</a></li>
+          <li><a href="/leaderboard.html">Leaderboard</a></li>
+          <li><button onclick="doLogout()" class="btn btn-ghost btn-sm" style="font-size:12px;">Logout</button></li>
+        </ul>
+      </div>
+    </nav>
+
+    <div class="admin-layout">
+      <!-- Sidebar -->
+      <div class="sidebar">
+        <div class="admin-name-badge">
+          <div class="admin-avatar" id="sidebar-avatar">A</div>
+          <div>
+            <div style="font-weight:600; color:var(--text-primary); font-size:12px;" id="sidebar-name">Admin</div>
+            <div style="font-size:10px; color:var(--text-muted);" id="sidebar-role">superadmin</div>
+          </div>
+        </div>
+        <div class="sidebar-section">
+          <div class="sidebar-label">Overview</div>
+          <button class="sidebar-item active" data-view="dashboard" onclick="switchView('dashboard', this)">📊 <span>Dashboard</span></button>
+        </div>
+        <div class="sidebar-section">
+          <div class="sidebar-label">Participants</div>
+          <button class="sidebar-item" data-view="all" onclick="switchView('all', this)">👥 <span>All</span> <span class="count" id="cnt-all">0</span></button>
+          <button class="sidebar-item" data-view="pending" onclick="switchView('pending', this)">⏳ <span>Pending</span> <span class="count" id="cnt-pending">0</span></button>
+          <button class="sidebar-item" data-view="approved" onclick="switchView('approved', this)">✅ <span>Approved</span> <span class="count" id="cnt-approved">0</span></button>
+          <button class="sidebar-item" data-view="rejected" onclick="switchView('rejected', this)">❌ <span>Rejected</span> <span class="count" id="cnt-rejected">0</span></button>
+          <button class="sidebar-item" data-view="checkedin" onclick="switchView('checkedin', this)">📍 <span>Checked In</span> <span class="count" id="cnt-checkedin">0</span></button>
+        </div>
+        <div class="sidebar-section">
+          <div class="sidebar-label">System</div>
+          <button class="sidebar-item" data-view="logs" onclick="switchView('logs', this)">📋 <span>Entry Logs</span></button>
+          <button class="sidebar-item" data-view="judges" onclick="switchView('judges', this)">⚖️ <span>Judges</span></button>
+        </div>
+      </div>
+
+      <!-- Main Content -->
+      <div class="main-area">
+
+        <!-- Dashboard View -->
+        <div id="view-dashboard">
+          <div class="section-header">
+            <div class="section-title">Live Dashboard</div>
+            <button onclick="loadStats(); loadParticipants();" class="btn btn-ghost btn-sm">↻ Refresh</button>
+          </div>
+          <div class="stat-grid">
+            <div class="stat-card cyan"><div class="stat-label">Total Registered</div><div class="stat-value" id="stat-total">—</div><div class="stat-sub">All participants</div></div>
+            <div class="stat-card yellow"><div class="stat-label">Pending Review</div><div class="stat-value" id="stat-pending">—</div><div class="stat-sub">Awaiting approval</div></div>
+            <div class="stat-card green"><div class="stat-label">Approved</div><div class="stat-value" id="stat-approved">—</div><div class="stat-sub">QR code issued</div></div>
+            <div class="stat-card red"><div class="stat-label">Rejected</div><div class="stat-value" id="stat-rejected">—</div><div class="stat-sub">Not approved</div></div>
+            <div class="stat-card purple"><div class="stat-label">Checked In</div><div class="stat-value" id="stat-checkedin">—</div><div class="stat-sub">At venue</div></div>
+            <div class="stat-card orange"><div class="stat-label">Judges Active</div><div class="stat-value" id="stat-judges">—</div><div class="stat-sub">Evaluating teams</div></div>
+          </div>
+          <div class="card">
+            <div class="card-title">🕐 Recent Check-ins</div>
+            <div id="recent-checkins">
+              <div class="empty-state"><div class="empty-state-icon">📭</div><div class="empty-state-text">No check-ins yet</div></div>
+            </div>
+          </div>
+        </div>
+
+        <!-- Participants Table View -->
+        <div id="view-participants" class="hidden">
+          <div class="section-header">
+            <div class="section-title" id="view-title">All Participants</div>
+            <div style="display:flex; gap:8px; flex-wrap:wrap;">
+              <button onclick="loadParticipants(currentStatus)" class="btn btn-ghost btn-sm">↻ Refresh</button>
+              <button onclick="bulkApprove()" id="bulk-approve-btn" class="btn btn-success btn-sm hidden">✅ Bulk Approve All Pending</button>
+            </div>
+          </div>
+          <div class="filter-bar">
+            <div class="search-wrap">
+              <span class="search-icon">🔍</span>
+              <input type="text" class="form-control" id="search-input" placeholder="Search name, email, college..." oninput="debounceSearch()">
+            </div>
+          </div>
+          <div class="card" style="padding:0; overflow:hidden;">
+            <div class="table-wrap">
+              <table id="participants-table">
+                <thead>
+                  <tr>
+                    <th>Reg ID</th>
+                    <th>Name</th>
+                    <th>Email</th>
+                    <th>College</th>
+                    <th>Phone</th>
+                    <th>Team</th>
+                    <th>Status</th>
+                    <th>Registered</th>
+                    <th>ID Proof</th>
+                    <th>Actions</th>
+                  </tr>
+                </thead>
+                <tbody id="participants-tbody">
+                  <tr><td colspan="10" class="text-center" style="padding:32px; color:var(--text-muted);">Loading...</td></tr>
+                </tbody>
+              </table>
+            </div>
+          </div>
+        </div>
+
+        <!-- Entry Logs -->
+        <div id="view-logs" class="hidden">
+          <div class="section-header">
+            <div class="section-title">Entry Logs</div>
+            <button onclick="loadLogs()" class="btn btn-ghost btn-sm">↻ Refresh</button>
+          </div>
+          <div class="card" style="padding:0; overflow:hidden;">
+            <div class="table-wrap">
+              <table>
+                <thead>
+                  <tr><th>Time</th><th>Participant</th><th>Reg ID</th><th>Action</th><th>Scanned By</th><th>IP</th></tr>
+                </thead>
+                <tbody id="logs-tbody">
+                  <tr><td colspan="6" class="text-center" style="padding:32px; color:var(--text-muted);">Loading...</td></tr>
+                </tbody>
+              </table>
+            </div>
+          </div>
+        </div>
+
+        <!-- Judges View -->
+        <div id="view-judges" class="hidden">
+          <div class="section-header">
+            <div class="section-title">Judge Management</div>
+            <button onclick="showCreateJudge()" class="btn btn-primary btn-sm">+ Add Judge</button>
+          </div>
+          <div id="create-judge-form" class="card hidden" style="margin-bottom:20px;">
+            <div class="card-title">➕ Create Judge Account</div>
+            <div class="form-grid">
+              <div class="form-group"><label class="form-label">Name</label><input type="text" class="form-control" id="j-name"></div>
+              <div class="form-group"><label class="form-label">Email</label><input type="email" class="form-control" id="j-email"></div>
+              <div class="form-group"><label class="form-label">Password</label><input type="password" class="form-control" id="j-password" placeholder="min 8 chars"></div>
+              <div class="form-group"><label class="form-label">Expertise</label><input type="text" class="form-control" id="j-expertise" placeholder="e.g. AI/ML, Web Dev"></div>
+            </div>
+            <div style="display:flex; gap:8px;">
+              <button onclick="createJudge()" class="btn btn-success btn-sm">Create Judge</button>
+              <button onclick="document.getElementById('create-judge-form').classList.add('hidden')" class="btn btn-ghost btn-sm">Cancel</button>
+            </div>
+          </div>
+          <div class="card" style="padding:0; overflow:hidden;">
+            <div class="table-wrap">
+              <table>
+                <thead><tr><th>Name</th><th>Email</th><th>Expertise</th><th>Active</th><th>Created</th></tr></thead>
+                <tbody id="judges-tbody">
+                  <tr><td colspan="5" class="text-center" style="padding:32px; color:var(--text-muted);">Loading...</td></tr>
+                </tbody>
+              </table>
+            </div>
+          </div>
+        </div>
+
+      </div>
+    </div>
+  </div>
+
+  <!-- Image Preview Modal -->
+  <div id="img-modal" class="modal-backdrop hidden">
+    <div class="modal" style="max-width:600px;">
+      <div class="modal-header">
+        <span class="modal-title">ID Proof</span>
+        <button onclick="closeImgModal()" class="modal-close">✕</button>
+      </div>
+      <img id="modal-img" src="" style="width:100%; border-radius:var(--radius-md);" alt="ID Proof">
+    </div>
+  </div>
+
+  <!-- QR Preview Modal -->
+  <div id="qr-modal" class="modal-backdrop hidden">
+    <div class="modal" style="max-width:380px; text-align:center;">
+      <div class="modal-header">
+        <span class="modal-title">QR Code</span>
+        <button onclick="closeQRModal()" class="modal-close">✕</button>
+      </div>
+      <div class="qr-frame" style="display:inline-block; margin:12px auto;">
+        <img id="modal-qr" src="" style="width:240px; height:240px;" alt="QR">
+      </div>
+      <div class="qr-reg-id" id="modal-qr-regid" style="margin:12px 0;"></div>
+      <button onclick="downloadModalQR()" class="btn btn-outline btn-sm">⬇ Download</button>
+    </div>
+  </div>
+
+  <div id="toast-container"></div>
+  <script src="/js/utils.js"></script>
+  <script>
+    let currentStatus = null;
+    let currentParticipants = [];
+    let searchTimer = null;
+    let currentQRData = null;
+
+    // ── Login ──────────────────────────────────────────────────
+    document.addEventListener('DOMContentLoaded', async () => {
+      document.getElementById('login-password').addEventListener('keypress', e => { if (e.key === 'Enter') doLogin(); });
+      const user = auth.getUser();
+      if (user && auth.getToken()) {
+        const v = await auth.verify();
+        if (v && v.type === 'admin') { showAdminUI(v.user); loadStats(); return; }
+      }
+      // show login overlay already visible
+    });
+
+    async function doLogin() {
+      const email = document.getElementById('login-email').value.trim();
+      const password = document.getElementById('login-password').value;
+      if (!email || !password) { showLoginError('Please enter email and password.'); return; }
+
+      const btn = document.getElementById('login-btn');
+      btn.disabled = true; btn.textContent = 'Logging in...';
+
+      const data = await api.post('/auth/admin/login', { email, password });
+      btn.disabled = false; btn.textContent = 'Login to Admin Panel';
+
+      if (data.success) {
+        auth.setToken(data.token, data.admin);
+        document.getElementById('login-overlay').style.display = 'none';
+        showAdminUI(data.admin);
+        loadStats();
+      } else {
+        showLoginError(data.message || 'Login failed');
+      }
+    }
+
+    function showLoginError(msg) {
+      const el = document.getElementById('login-error');
+      el.textContent = msg; el.classList.remove('hidden');
+    }
+
+    function showAdminUI(admin) {
+      document.getElementById('admin-ui').classList.remove('hidden');
+      document.getElementById('sidebar-name').textContent = admin.name;
+      document.getElementById('sidebar-role').textContent = admin.role;
+      document.getElementById('sidebar-avatar').textContent = admin.name.charAt(0).toUpperCase();
+    }
+
+    function doLogout() {
+      auth.logout();
+      location.reload();
+    }
+
+    // ── Views ──────────────────────────────────────────────────
+    function switchView(view, btn) {
+      document.querySelectorAll('.sidebar-item').forEach(b => b.classList.remove('active'));
+      btn.classList.add('active');
+
+      document.getElementById('view-dashboard').classList.add('hidden');
+      document.getElementById('view-participants').classList.add('hidden');
+      document.getElementById('view-logs').classList.add('hidden');
+      document.getElementById('view-judges').classList.add('hidden');
+
+      if (view === 'dashboard') {
+        document.getElementById('view-dashboard').classList.remove('hidden');
+        loadStats();
+      } else if (view === 'logs') {
+        document.getElementById('view-logs').classList.remove('hidden');
+        document.getElementById('view-participants').classList.add('hidden');
+        loadLogs();
+      } else if (view === 'judges') {
+        document.getElementById('view-judges').classList.remove('hidden');
+        loadJudges();
+      } else {
+        const statusMap = { all: null, pending: 'pending', approved: 'approved', rejected: 'rejected', checkedin: null };
+        currentStatus = statusMap[view] || null;
+        document.getElementById('view-participants').classList.remove('hidden');
+        const titleMap = { all:'All Participants', pending:'Pending Review', approved:'Approved Participants', rejected:'Rejected', checkedin:'Checked-in Participants' };
+        document.getElementById('view-title').textContent = titleMap[view];
+        document.getElementById('bulk-approve-btn').classList.toggle('hidden', view !== 'pending');
+        loadParticipants(currentStatus, view === 'checkedin' ? 'checkedin' : null);
+      }
+    }
+
+    // ── Stats ──────────────────────────────────────────────────
+    async function loadStats() {
+      const data = await api.get('/admin/stats');
+      if (!data.success) return;
+      const s = data.stats;
+      document.getElementById('stat-total').textContent    = s.total;
+      document.getElementById('stat-pending').textContent  = s.pending;
+      document.getElementById('stat-approved').textContent = s.approved;
+      document.getElementById('stat-rejected').textContent = s.rejected;
+      document.getElementById('stat-checkedin').textContent= s.checkedIn;
+      document.getElementById('stat-judges').textContent   = s.judges;
+      document.getElementById('cnt-all').textContent      = s.total;
+      document.getElementById('cnt-pending').textContent  = s.pending;
+      document.getElementById('cnt-approved').textContent = s.approved;
+      document.getElementById('cnt-rejected').textContent = s.rejected;
+      document.getElementById('cnt-checkedin').textContent= s.checkedIn;
+
+      // Recent check-ins
+      const div = document.getElementById('recent-checkins');
+      if (!data.recentCheckIns.length) {
+        div.innerHTML = '<div class="empty-state"><div class="empty-state-icon">📭</div><div class="empty-state-text">No check-ins yet</div></div>';
+      } else {
+        div.innerHTML = `<div class="table-wrap"><table>
+          <thead><tr><th>Name</th><th>Reg ID</th><th>Time</th><th>Scanned By</th></tr></thead>
+          <tbody>${data.recentCheckIns.map(l => `
+            <tr>
+              <td class="name">${l.participantName}</td>
+              <td class="reg-id">${l.registrationId}</td>
+              <td>${formatDateTime(l.timestamp)}</td>
+              <td style="color:var(--text-muted)">${l.scannedBy}</td>
+            </tr>`).join('')}
+          </tbody></table></div>`;
+      }
+    }
+
+    // ── Participants ───────────────────────────────────────────
+    async function loadParticipants(status = null, special = null) {
+      const tbody = document.getElementById('participants-tbody');
+      tbody.innerHTML = '<tr><td colspan="10" class="text-center" style="padding:32px; color:var(--text-muted);">Loading...</td></tr>';
+      
+      let url = '/admin/participants?limit=200';
+      if (status) url += `&status=${status}`;
+      const search = document.getElementById('search-input').value.trim();
+      if (search) url += `&search=${encodeURIComponent(search)}`;
+
+      const data = await api.get(url);
+      if (!data.success) { tbody.innerHTML = '<tr><td colspan="10" class="text-center" style="padding:32px; color:var(--accent-red);">Failed to load</td></tr>'; return; }
+
+      let participants = data.data;
+      if (special === 'checkedin') participants = participants.filter(p => p.checkedIn);
+
+      currentParticipants = participants;
+
+      if (!participants.length) {
+        tbody.innerHTML = '<tr><td colspan="10"><div class="empty-state"><div class="empty-state-icon">👤</div><div class="empty-state-text">No participants found</div></div></td></tr>';
+        return;
+      }
+
+      tbody.innerHTML = participants.map(p => `
+        <tr class="participant-row" id="row-${p._id}">
+          <td><span class="reg-id">${p.registrationId || '—'}</span></td>
+          <td><span class="name">${p.name}</span></td>
+          <td style="color:var(--text-muted); font-size:12px;">${p.email}</td>
+          <td style="font-size:12px; max-width:160px; overflow:hidden; text-overflow:ellipsis;">${p.college}</td>
+          <td style="font-family:var(--font-mono); font-size:11px;">${p.phone}</td>
+          <td style="font-size:12px;">${p.teamName || '—'}</td>
+          <td>${statusBadge(p.status, p.checkedIn)}</td>
+          <td style="font-size:11px; color:var(--text-muted);">${formatDate(p.createdAt)}</td>
+          <td>${p.idProof?.path ? `<button class="view-img-btn" onclick="viewID('${p.idProof.path}')">View</button>` : '<span style="color:var(--text-muted);font-size:11px;">None</span>'}</td>
+          <td>
+            <div class="action-btns">
+              ${p.status === 'pending' ? `
+                <button onclick="approveParticipant('${p._id}')" class="btn btn-success btn-sm" style="padding:4px 10px;font-size:11px;">Approve</button>
+                <button onclick="rejectParticipant('${p._id}', '${p.name}')" class="btn btn-danger btn-sm" style="padding:4px 10px;font-size:11px;">Reject</button>
+              ` : ''}
+              ${p.status === 'approved' && p.qrCode?.image ? `<button onclick="viewQR('${p._id}')" class="btn btn-outline btn-sm" style="padding:4px 10px;font-size:11px;">QR</button>` : ''}
+              ${p.status === 'approved' && !p.checkedIn ? `<button onclick="regenQR('${p._id}')" class="btn btn-ghost btn-sm" style="padding:4px 10px;font-size:11px;">Regen QR</button>` : ''}
+            </div>
+          </td>
+        </tr>`).join('');
+    }
+
+    function debounceSearch() {
+      clearTimeout(searchTimer);
+      searchTimer = setTimeout(() => loadParticipants(currentStatus), 400);
+    }
+
+    async function approveParticipant(id) {
+      showLoader();
+      const data = await api.post(`/admin/approve/${id}`, {});
+      hideLoader();
+      if (data.success) {
+        showToast(`✅ ${data.message}`, 'success');
+        loadStats();
+        loadParticipants(currentStatus);
+      } else { showToast(data.message, 'error'); }
+    }
+
+    function rejectParticipant(id, name) {
+      createModal(`Reject Participant`, `
+        <p style="color:var(--text-secondary); margin-bottom:16px;">Rejecting: <strong>${name}</strong></p>
+        <label class="form-label">Reason (optional)</label>
+        <textarea class="form-control" id="reject-reason" rows="3" placeholder="Incomplete info, invalid ID..."></textarea>
+      `, async () => {
+        const reason = document.getElementById('reject-reason')?.value || '';
+        const data = await api.post(`/admin/reject/${id}`, { reason });
+        if (data.success) { showToast(data.message, 'success'); loadStats(); loadParticipants(currentStatus); }
+        else showToast(data.message, 'error');
+      }, 'Reject', 'btn-danger');
+    }
+
+    async function bulkApprove() {
+      createModal('Bulk Approve', '<p style="color:var(--text-secondary);">Approve ALL pending participants and generate QR codes for each?</p>',
+        async () => {
+          showLoader();
+          const data = await api.post('/admin/bulk-approve', {});
+          hideLoader();
+          if (data.success) { showToast(data.message, 'success'); loadStats(); loadParticipants(); }
+          else showToast(data.message, 'error');
+        }, 'Approve All', 'btn-success');
+    }
+
+    async function regenQR(id) {
+      showLoader();
+      const data = await api.post(`/admin/regenerate-qr/${id}`, {});
+      hideLoader();
+      if (data.success) showToast('QR code regenerated.', 'success');
+      else showToast(data.message, 'error');
+    }
+
+    // ── ID Proof Modal ─────────────────────────────────────────
+    function viewID(path) {
+      document.getElementById('modal-img').src = path;
+      document.getElementById('img-modal').classList.remove('hidden');
+    }
+    function closeImgModal() { document.getElementById('img-modal').classList.add('hidden'); }
+
+    // ── QR Modal ───────────────────────────────────────────────
+    function viewQR(id) {
+      const p = currentParticipants.find(x => x._id === id);
+      if (!p?.qrCode?.image) return;
+      currentQRData = { image: p.qrCode.image, regId: p.registrationId };
+      document.getElementById('modal-qr').src = p.qrCode.image;
+      document.getElementById('modal-qr-regid').textContent = p.registrationId;
+      document.getElementById('qr-modal').classList.remove('hidden');
+    }
+    function closeQRModal() { document.getElementById('qr-modal').classList.add('hidden'); }
+    function downloadModalQR() {
+      if (!currentQRData) return;
+      const a = document.createElement('a');
+      a.download = `QR-${currentQRData.regId}.png`;
+      a.href = currentQRData.image;
+      a.click();
+    }
+
+    // ── Entry Logs ─────────────────────────────────────────────
+    async function loadLogs() {
+      const tbody = document.getElementById('logs-tbody');
+      const data = await api.get('/admin/entry-logs');
+      if (!data.success || !data.data.length) {
+        tbody.innerHTML = '<tr><td colspan="6"><div class="empty-state"><div class="empty-state-icon">📋</div><div class="empty-state-text">No logs yet</div></div></td></tr>';
+        return;
+      }
+      const colorMap = { checkin:'var(--accent-green)', duplicate_scan:'var(--accent-yellow)', invalid_qr:'var(--accent-red)', expired_qr:'var(--accent-orange)' };
+      tbody.innerHTML = data.data.map(l => `
+        <tr>
+          <td style="font-size:11px; color:var(--text-muted);">${formatDateTime(l.timestamp)}</td>
+          <td class="name">${l.participantName || '—'}</td>
+          <td class="reg-id">${l.registrationId || '—'}</td>
+          <td><span style="color:${colorMap[l.action] || 'white'}; font-family:var(--font-mono); font-size:11px;">${l.action}</span></td>
+          <td style="font-size:12px;">${l.scannedBy}</td>
+          <td style="font-family:var(--font-mono); font-size:10px; color:var(--text-muted);">${l.ipAddress || '—'}</td>
+        </tr>`).join('');
+    }
+
+    // ── Judges ─────────────────────────────────────────────────
+    async function loadJudges() {
+      const tbody = document.getElementById('judges-tbody');
+      const data = await api.get('/judges/list');
+      if (!data.success || !data.data.length) {
+        tbody.innerHTML = '<tr><td colspan="5"><div class="empty-state"><div class="empty-state-icon">⚖️</div><div class="empty-state-text">No judges created yet</div></div></td></tr>';
+        return;
+      }
+      tbody.innerHTML = data.data.map(j => `
+        <tr>
+          <td class="name">${j.name}</td>
+          <td style="color:var(--text-muted); font-size:12px;">${j.email}</td>
+          <td style="font-size:12px;">${j.expertise || '—'}</td>
+          <td><span class="badge ${j.isActive ? 'badge-approved' : 'badge-rejected'}">${j.isActive ? 'Active' : 'Inactive'}</span></td>
+          <td style="font-size:11px; color:var(--text-muted);">${formatDate(j.createdAt)}</td>
+        </tr>`).join('');
+    }
+
+    function showCreateJudge() {
+      document.getElementById('create-judge-form').classList.toggle('hidden');
+    }
+
+    async function createJudge() {
+      const name     = document.getElementById('j-name').value.trim();
+      const email    = document.getElementById('j-email').value.trim();
+      const password = document.getElementById('j-password').value;
+      const expertise= document.getElementById('j-expertise').value.trim();
+      if (!name || !email || !password) { showToast('Name, email, and password are required.', 'warning'); return; }
+      if (password.length < 8) { showToast('Password must be at least 8 characters.', 'warning'); return; }
+
+      const data = await api.post('/auth/judge/create', { name, email, password, expertise });
+      if (data.success) {
+        showToast('Judge created successfully!', 'success');
+        document.getElementById('create-judge-form').classList.add('hidden');
+        loadJudges();
+      } else showToast(data.message, 'error');
+    }
+
+    // ── Close modals on backdrop click ────────────────────────
+    document.getElementById('img-modal').addEventListener('click', e => { if (e.target.id === 'img-modal') closeImgModal(); });
+    document.getElementById('qr-modal').addEventListener('click', e => { if (e.target.id === 'qr-modal') closeQRModal(); });
+  </script>
+</body>
+</html>

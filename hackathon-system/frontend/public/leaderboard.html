@@ -1,0 +1,241 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Leaderboard — HackTrack</title>
+  <link rel="stylesheet" href="/css/style.css">
+  <style>
+    .lb-header-row {
+      display: grid;
+      grid-template-columns: 60px 1fr 120px 120px 120px 120px 80px;
+      gap: 0; align-items: center;
+      padding: 10px 16px;
+      font-family: var(--font-mono);
+      font-size: 10px;
+      color: var(--text-muted);
+      text-transform: uppercase;
+      letter-spacing: 0.1em;
+      border-bottom: 1px solid var(--border);
+    }
+    .lb-row {
+      display: grid;
+      grid-template-columns: 60px 1fr 120px 120px 120px 120px 80px;
+      gap: 0; align-items: center;
+      padding: 16px;
+      border-bottom: 1px solid rgba(30,58,95,0.3);
+      transition: var(--transition);
+    }
+    .lb-row:hover { background: var(--bg-hover); }
+    .lb-row.rank-1-row { background: rgba(251,191,36,0.05); border-left: 3px solid var(--accent-yellow); }
+    .lb-row.rank-2-row { background: rgba(148,163,184,0.04); border-left: 3px solid #94a3b8; }
+    .lb-row.rank-3-row { background: rgba(205,124,62,0.04); border-left: 3px solid #cd7c3e; }
+    @media(max-width:800px) {
+      .lb-header-row { display: none; }
+      .lb-row {
+        grid-template-columns: 48px 1fr;
+        grid-template-rows: auto auto;
+        gap: 4px;
+        padding: 12px;
+      }
+      .lb-cell-inn, .lb-cell-tech, .lb-cell-pres, .lb-cell-judges { display: none; }
+      .lb-cell-total { grid-column: 2; justify-self: end; }
+    }
+    .team-name { font-family: var(--font-display); font-size: 1rem; font-weight: 700; color: var(--text-primary); letter-spacing: 0.04em; }
+    .team-details { font-size: 11px; color: var(--text-muted); margin-top: 2px; }
+    .score-cell { font-family: var(--font-mono); font-size: 13px; font-weight: 600; color: var(--text-secondary); }
+    .total-cell { font-family: var(--font-display); font-size: 1.3rem; font-weight: 700; }
+    .medal-row { display: flex; align-items: center; gap: 8px; padding: 0 16px 20px; }
+    .podium-card {
+      flex: 1; background: var(--bg-elevated); border-radius: var(--radius-lg);
+      padding: 20px; text-align: center; border: 1px solid var(--border);
+      transition: var(--transition);
+    }
+    .podium-card:hover { transform: translateY(-2px); }
+    .podium-card.first { border-top: 3px solid var(--accent-yellow); background: rgba(251,191,36,0.05); }
+    .podium-card.second { border-top: 3px solid #94a3b8; }
+    .podium-card.third  { border-top: 3px solid #cd7c3e; }
+    .podium-medal { font-size: 32px; margin-bottom: 8px; }
+    .podium-name { font-family: var(--font-display); font-size: 1rem; font-weight: 700; color: var(--text-primary); }
+    .podium-score { font-family: var(--font-mono); font-size: 1.4rem; font-weight: 700; color: var(--accent-cyan); margin: 4px 0; }
+    .podium-college { font-size: 11px; color: var(--text-muted); }
+    .refresh-info { font-family: var(--font-mono); font-size: 11px; color: var(--text-muted); }
+    .live-dot {
+      width: 8px; height: 8px; background: var(--accent-green);
+      border-radius: 50%; display: inline-block;
+      box-shadow: 0 0 8px var(--accent-green);
+      animation: pulse 2s ease infinite;
+    }
+    @keyframes pulse { 0%,100%{opacity:1;transform:scale(1)} 50%{opacity:0.6;transform:scale(0.85)} }
+    .unscored-section { margin-top: 32px; }
+    .unscored-section .section-title { color: var(--text-muted); }
+  </style>
+</head>
+<body>
+
+  <nav class="navbar">
+    <div class="navbar-inner">
+      <a href="/" class="navbar-brand">
+        <div class="navbar-logo">⚡</div>
+        <span class="navbar-title">Hack<span>Track</span></span>
+      </a>
+      <ul class="navbar-nav">
+        <li><a href="/register.html">Register</a></li>
+        <li><a href="/status.html">My Status</a></li>
+        <li><a href="/leaderboard.html" class="active">Leaderboard</a></li>
+        <li><a href="/admin.html">Admin</a></li>
+      </ul>
+    </div>
+  </nav>
+
+  <div class="container" style="padding-top:32px; padding-bottom:60px; position:relative; z-index:1;">
+
+    <div class="page-header">
+      <div class="page-tag">Live Rankings</div>
+      <div style="display:flex; align-items:flex-start; justify-content:space-between; flex-wrap:wrap; gap:12px;">
+        <div>
+          <h1 style="display:flex; align-items:center; gap:12px;">
+            🏆 Leaderboard
+            <span class="live-dot" title="Live updates every 30s"></span>
+          </h1>
+          <p style="color:var(--text-secondary); margin-top:8px;">Teams ranked by average score across all judges.</p>
+        </div>
+        <div style="text-align:right;">
+          <button onclick="loadLeaderboard()" class="btn btn-ghost btn-sm">↻ Refresh</button>
+          <div class="refresh-info" id="last-updated" style="margin-top:6px;"></div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Podium (top 3) -->
+    <div id="podium" class="medal-row hidden"></div>
+
+    <!-- Main Leaderboard -->
+    <div class="card" style="padding:0; overflow:hidden;" id="lb-card">
+      <div style="padding:16px 16px 0; display:flex; align-items:center; justify-content:space-between; flex-wrap:wrap; gap:8px;">
+        <div class="card-title" style="margin-bottom:0;">📊 Full Rankings</div>
+        <div id="lb-count" style="font-family:var(--font-mono); font-size:11px; color:var(--text-muted);"></div>
+      </div>
+
+      <!-- Column headers -->
+      <div class="lb-header-row">
+        <div>Rank</div>
+        <div>Team</div>
+        <div>Innovation</div>
+        <div>Technical</div>
+        <div>Presentation</div>
+        <div>Total Score</div>
+        <div>Judges</div>
+      </div>
+
+      <div id="lb-body">
+        <div class="empty-state" style="padding:48px;"><div class="empty-state-icon">⏳</div><div class="empty-state-text">Loading leaderboard...</div></div>
+      </div>
+    </div>
+
+    <!-- Unscored teams -->
+    <div id="unscored-section" class="unscored-section hidden">
+      <div class="section-header">
+        <div class="section-title">Awaiting Evaluation</div>
+      </div>
+      <div class="card" style="padding:0; overflow:hidden;">
+        <div class="lb-header-row">
+          <div>—</div>
+          <div>Team</div>
+          <div colspan="4">Status</div>
+          <div></div>
+        </div>
+        <div id="unscored-body"></div>
+      </div>
+    </div>
+
+  </div>
+
+  <div id="toast-container"></div>
+  <script src="/js/utils.js"></script>
+  <script>
+    async function loadLeaderboard() {
+      const data = await api.get('/leaderboard');
+      if (!data.success) { showToast('Failed to load leaderboard', 'error'); return; }
+
+      document.getElementById('last-updated').textContent = `Updated: ${formatDateTime(data.lastUpdated)}`;
+      document.getElementById('lb-count').textContent = `${data.leaderboard.length} ranked team${data.leaderboard.length !== 1 ? 's' : ''}`;
+
+      renderPodium(data.leaderboard.slice(0, 3));
+      renderLeaderboard(data.leaderboard);
+      renderUnscored(data.unscored);
+    }
+
+    function renderPodium(top3) {
+      if (!top3.length) { document.getElementById('podium').classList.add('hidden'); return; }
+      const medals = ['🥇','🥈','🥉'];
+      const classes = ['first','second','third'];
+      document.getElementById('podium').classList.remove('hidden');
+      document.getElementById('podium').innerHTML = top3.map((t, i) => `
+        <div class="podium-card ${classes[i]}">
+          <div class="podium-medal">${medals[i]}</div>
+          <div class="podium-name">${t.teamName || t.name}</div>
+          <div class="podium-score">${t.scores.total.toFixed(1)}</div>
+          <div class="podium-college">${t.college}</div>
+          ${t.projectTitle ? `<div class="podium-college" style="margin-top:2px; color:var(--text-secondary)">${t.projectTitle}</div>` : ''}
+        </div>`).join('');
+    }
+
+    function renderLeaderboard(list) {
+      const body = document.getElementById('lb-body');
+      if (!list.length) {
+        body.innerHTML = '<div class="empty-state" style="padding:48px;"><div class="empty-state-icon">📭</div><div class="empty-state-text">No scores submitted yet. Check back after judging begins.</div></div>';
+        return;
+      }
+
+      const rankClasses = ['rank-1-row', 'rank-2-row', 'rank-3-row'];
+      const totalColors = (score) => {
+        if (score >= 8) return 'var(--accent-green)';
+        if (score >= 6) return 'var(--accent-cyan)';
+        if (score >= 4) return 'var(--accent-yellow)';
+        return 'var(--accent-orange)';
+      };
+
+      body.innerHTML = list.map((t, i) => `
+        <div class="lb-row ${rankClasses[i] || ''}">
+          <div>
+            <div class="rank-badge ${i < 3 ? `rank-${i+1}` : 'rank-other'}">${t.rank}</div>
+          </div>
+          <div>
+            <div class="team-name">${t.teamName || t.name}</div>
+            <div class="team-details">${t.registrationId} · ${t.college}</div>
+            ${t.projectTitle ? `<div class="team-details" style="color:var(--text-secondary); margin-top:2px;">${t.projectTitle}</div>` : ''}
+          </div>
+          <div class="score-cell lb-cell-inn">${t.scores.innovation.toFixed(1)}</div>
+          <div class="score-cell lb-cell-tech">${t.scores.technicalComplexity.toFixed(1)}</div>
+          <div class="score-cell lb-cell-pres">${t.scores.presentation.toFixed(1)}</div>
+          <div class="lb-cell-total">
+            <span class="total-cell" style="color:${totalColors(t.scores.total)}">${t.scores.total.toFixed(1)}</span>
+            <span style="font-family:var(--font-mono); font-size:10px; color:var(--text-muted);">/10</span>
+          </div>
+          <div class="lb-cell-judges" style="font-family:var(--font-mono); font-size:11px; color:var(--text-muted);">${t.judgeCount} judge${t.judgeCount !== 1 ? 's' : ''}</div>
+        </div>`).join('');
+    }
+
+    function renderUnscored(list) {
+      if (!list.length) { document.getElementById('unscored-section').classList.add('hidden'); return; }
+      document.getElementById('unscored-section').classList.remove('hidden');
+      document.getElementById('unscored-body').innerHTML = list.map(t => `
+        <div class="lb-row">
+          <div><span style="color:var(--text-muted); font-family:var(--font-mono); font-size:13px;">—</span></div>
+          <div>
+            <div class="team-name" style="color:var(--text-secondary);">${t.teamName || t.name}</div>
+            <div class="team-details">${t.registrationId} · ${t.college}</div>
+          </div>
+          <div colspan="5"><span class="badge badge-pending">Awaiting evaluation</span></div>
+        </div>`).join('');
+    }
+
+    // Load on page load
+    loadLeaderboard();
+
+    // Auto-refresh every 30 seconds
+    setInterval(loadLeaderboard, 30000);
+  </script>
+</body>
+</html>
