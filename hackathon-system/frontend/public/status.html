@@ -183,6 +183,20 @@
           </div>
         </div>
 
+        <!-- AI Verification Status -->
+        <div id="verification-section" class="hidden" style="margin-bottom:20px;">
+          <div style="background:var(--bg-elevated); border-radius:var(--radius-lg); padding:16px; border:1px solid var(--border);">
+            <div style="display:flex; align-items:center; justify-content:space-between; margin-bottom:8px;">
+              <span style="font-family:var(--font-mono); font-size:10px; color:var(--text-muted); text-transform:uppercase; letter-spacing:0.1em;">🤖 AI Identity Verification</span>
+              <span id="verify-badge"></span>
+            </div>
+            <div id="verify-score-bar" style="background:var(--bg-deep); border-radius:20px; height:6px; overflow:hidden; margin-bottom:8px;">
+              <div id="verify-score-fill" style="height:100%; border-radius:20px; transition:width 0.6s ease;"></div>
+            </div>
+            <div id="verify-reasoning" style="font-size:12px; color:var(--text-secondary); line-height:1.5;"></div>
+          </div>
+        </div>
+
         <!-- Pending -->
         <div id="status-pending" class="pending-card hidden">
           <div class="pending-spinner"></div>
@@ -277,6 +291,25 @@
       document.getElementById('detail-team').textContent    = d.teamName || 'Individual';
       document.getElementById('detail-project').textContent = d.projectTitle || '—';
       document.getElementById('detail-date').textContent    = formatDate(d.registeredAt);
+
+      // AI Verification
+      const verifySection = document.getElementById('verification-section');
+      if (d.verificationStatus && d.verificationStatus !== 'pending') {
+        verifySection.classList.remove('hidden');
+        const scoreColors = {
+          verified: { color: 'var(--accent-green)', label: '✅ Verified', bg: 'rgba(0,255,136,0.8)' },
+          failed: { color: 'var(--accent-red)', label: '❌ Failed', bg: 'rgba(255,71,87,0.8)' },
+          manual_review: { color: 'var(--accent-yellow)', label: '⚠️ Under Review', bg: 'rgba(251,191,36,0.8)' }
+        };
+        const sc = scoreColors[d.verificationStatus] || scoreColors.manual_review;
+        document.getElementById('verify-badge').innerHTML = `<span style="font-size:11px;color:${sc.color};font-weight:600;">${sc.label} (${d.verificationScore || 0}/100)</span>`;
+        const fill = document.getElementById('verify-score-fill');
+        fill.style.width = `${d.verificationScore || 0}%`;
+        fill.style.background = sc.bg;
+        document.getElementById('verify-reasoning').textContent = d.verificationReasoning || '';
+      } else {
+        verifySection.classList.add('hidden');
+      }
 
       // Checked-in banner
       if (d.checkedIn) {

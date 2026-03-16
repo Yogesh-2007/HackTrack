@@ -93,9 +93,19 @@
       <div class="success-card">
         <div class="success-icon">🎉</div>
         <h2 style="color:var(--accent-green); font-size:1.8rem; margin-bottom:8px;">Registration Successful!</h2>
-        <p style="color:var(--text-secondary); margin-bottom:16px;">Your registration has been submitted and is pending admin review.</p>
+        <p style="color:var(--text-secondary); margin-bottom:16px;">Your registration has been submitted. Our AI agent is verifying your ID proof.</p>
         <div class="success-reg-id" id="success-reg-id">—</div>
-        <p style="color:var(--text-muted); font-size:12px; margin-bottom:24px;">Save this Registration ID to check your status</p>
+        <p style="color:var(--text-muted); font-size:12px; margin-bottom:16px;">Save this Registration ID to check your status</p>
+        
+        <!-- AI Verification Status -->
+        <div id="verify-status" style="background:var(--bg-elevated); border:1px solid var(--border); border-radius:var(--radius-lg); padding:16px; margin-bottom:20px; text-align:center;">
+          <div style="display:flex; align-items:center; justify-content:center; gap:10px; margin-bottom:8px;">
+            <div class="pending-spinner" style="width:20px;height:20px;border-width:2px;margin:0;"></div>
+            <span style="color:var(--accent-yellow); font-weight:600; font-size:13px;">🤖 AI Verification in Progress...</span>
+          </div>
+          <p style="color:var(--text-muted); font-size:11px;">This usually takes 10–30 seconds. You can check your status anytime.</p>
+        </div>
+
         <div style="display:flex; gap:12px; justify-content:center; flex-wrap:wrap;">
           <a href="/status.html" class="btn btn-primary">Check My Status</a>
           <button onclick="resetForm()" class="btn btn-ghost">Register Another</button>
@@ -294,6 +304,11 @@
           successState.classList.remove('hidden');
           document.getElementById('success-reg-id').textContent = data.data.registrationId;
           showToast('Registration submitted successfully!', 'success');
+
+          // Poll for verification result
+          if (data.data.email) {
+            pollVerification(data.data.email);
+          }
         } else {
           const errDiv = document.getElementById('form-error');
           errDiv.textContent = data.message || 'Registration failed. Please try again.';
@@ -315,6 +330,44 @@
       document.getElementById('success-state').classList.add('hidden');
       document.getElementById('form-state').classList.remove('hidden');
       clearErrors();
+    }
+
+    // Poll verification status after registration
+    let pollTimer = null;
+    function pollVerification(email) {
+      let attempts = 0;
+      clearInterval(pollTimer);
+      pollTimer = setInterval(async () => {
+        attempts++;
+        if (attempts > 20) { clearInterval(pollTimer); return; } // Stop after ~60s
+        try {
+          const data = await api.get(`/participants/status/${encodeURIComponent(email)}`);
+          if (!data.success) return;
+          const d = data.data;
+          const el = document.getElementById('verify-status');
+          if (!el) { clearInterval(pollTimer); return; }
+
+          if (d.status === 'approved') {
+            el.innerHTML = `
+              <div style="color:var(--accent-green); font-weight:600; font-size:14px; margin-bottom:4px;">✅ ID Verified & Auto-Approved!</div>
+              <p style="color:var(--text-secondary); font-size:12px;">Your identity has been verified by our AI agent. A QR code has been generated for you.</p>`;
+            el.style.borderColor = 'rgba(0,255,136,0.3)';
+            clearInterval(pollTimer);
+          } else if (d.status === 'rejected') {
+            el.innerHTML = `
+              <div style="color:var(--accent-red); font-weight:600; font-size:14px; margin-bottom:4px;">❌ Verification Issue</div>
+              <p style="color:var(--text-secondary); font-size:12px;">Our AI could not fully verify your ID. Please check your status page for details.</p>`;
+            el.style.borderColor = 'rgba(255,71,87,0.3)';
+            clearInterval(pollTimer);
+          } else if (d.verificationStatus && d.verificationStatus !== 'pending') {
+            el.innerHTML = `
+              <div style="color:var(--accent-yellow); font-weight:600; font-size:14px; margin-bottom:4px;">⏳ Under Manual Review</div>
+              <p style="color:var(--text-secondary); font-size:12px;">Our AI flagged your ID for additional review by the admin team. You'll be notified soon.</p>`;
+            el.style.borderColor = 'rgba(251,191,36,0.3)';
+            clearInterval(pollTimer);
+          }
+        } catch (err) { /* silent */ }
+      }, 3000);
     }
   </script>
 </body>

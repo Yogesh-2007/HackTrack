@@ -126,6 +126,7 @@
           <button class="sidebar-item" data-view="approved" onclick="switchView('approved', this)">✅ <span>Approved</span> <span class="count" id="cnt-approved">0</span></button>
           <button class="sidebar-item" data-view="rejected" onclick="switchView('rejected', this)">❌ <span>Rejected</span> <span class="count" id="cnt-rejected">0</span></button>
           <button class="sidebar-item" data-view="checkedin" onclick="switchView('checkedin', this)">📍 <span>Checked In</span> <span class="count" id="cnt-checkedin">0</span></button>
+          <button class="sidebar-item" data-view="ai-verified" onclick="switchView('ai-verified', this)">🤖 <span>AI Verified</span> <span class="count" id="cnt-ai-verified">0</span></button>
         </div>
         <div class="sidebar-section">
           <div class="sidebar-label">System</div>
@@ -185,6 +186,7 @@
                     <th>College</th>
                     <th>Phone</th>
                     <th>Team</th>
+                    <th>AI Verify</th>
                     <th>Status</th>
                     <th>Registered</th>
                     <th>ID Proof</th>
@@ -192,7 +194,7 @@
                   </tr>
                 </thead>
                 <tbody id="participants-tbody">
-                  <tr><td colspan="10" class="text-center" style="padding:32px; color:var(--text-muted);">Loading...</td></tr>
+                  <tr><td colspan="11" class="text-center" style="padding:32px; color:var(--text-muted);">Loading...</td></tr>
                 </tbody>
               </table>
             </div>
@@ -265,6 +267,19 @@
     </div>
   </div>
 
+  <!-- AI Verification Detail Modal -->
+  <div id="verify-modal" class="modal-backdrop hidden">
+    <div class="modal" style="max-width:600px;">
+      <div class="modal-header">
+        <span class="modal-title">🤖 AI Verification Details</span>
+        <button onclick="closeVerifyModal()" class="modal-close">✕</button>
+      </div>
+      <div id="verify-modal-body" style="padding:20px;">
+        <div style="text-align:center; padding:20px; color:var(--text-muted);">Loading...</div>
+      </div>
+    </div>
+  </div>
+
   <!-- QR Preview Modal -->
   <div id="qr-modal" class="modal-backdrop hidden">
     <div class="modal" style="max-width:380px; text-align:center;">
@@ -294,7 +309,7 @@
       const user = auth.getUser();
       if (user && auth.getToken()) {
         const v = await auth.verify();
-        if (v && v.type === 'admin') { showAdminUI(v.user); loadStats(); return; }
+        if (v && v.type === 'admin') { showAdminUI(v.user); loadStats(); loadVerificationStats(); return; }
       }
       // show login overlay already visible
     });
@@ -315,6 +330,7 @@
         document.getElementById('login-overlay').style.display = 'none';
         showAdminUI(data.admin);
         loadStats();
+        loadVerificationStats();
       } else {
         showLoginError(data.message || 'Login failed');
       }
@@ -358,13 +374,13 @@
         document.getElementById('view-judges').classList.remove('hidden');
         loadJudges();
       } else {
-        const statusMap = { all: null, pending: 'pending', approved: 'approved', rejected: 'rejected', checkedin: null };
+        const statusMap = { all: null, pending: 'pending', approved: 'approved', rejected: 'rejected', checkedin: null, 'ai-verified': null };
         currentStatus = statusMap[view] || null;
         document.getElementById('view-participants').classList.remove('hidden');
-        const titleMap = { all:'All Participants', pending:'Pending Review', approved:'Approved Participants', rejected:'Rejected', checkedin:'Checked-in Participants' };
+        const titleMap = { all:'All Participants', pending:'Pending Review', approved:'Approved Participants', rejected:'Rejected', checkedin:'Checked-in Participants', 'ai-verified':'AI Verified Participants' };
         document.getElementById('view-title').textContent = titleMap[view];
         document.getElementById('bulk-approve-btn').classList.toggle('hidden', view !== 'pending');
-        loadParticipants(currentStatus, view === 'checkedin' ? 'checkedin' : null);
+        loadParticipants(currentStatus, (view === 'checkedin' || view === 'ai-verified') ? view : null);
       }
     }
 
@@ -406,7 +422,7 @@
     // ── Participants ───────────────────────────────────────────
     async function loadParticipants(status = null, special = null) {
       const tbody = document.getElementById('participants-tbody');
-      tbody.innerHTML = '<tr><td colspan="10" class="text-center" style="padding:32px; color:var(--text-muted);">Loading...</td></tr>';
+      tbody.innerHTML = '<tr><td colspan="11" class="text-center" style="padding:32px; color:var(--text-muted);">Loading...</td></tr>';
       
       let url = '/admin/participants?limit=200';
       if (status) url += `&status=${status}`;
@@ -421,8 +437,10 @@
 
       currentParticipants = participants;
 
+      if (special === 'ai-verified') participants = participants.filter(p => p.idVerification?.status === 'verified');
+
       if (!participants.length) {
-        tbody.innerHTML = '<tr><td colspan="10"><div class="empty-state"><div class="empty-state-icon">👤</div><div class="empty-state-text">No participants found</div></div></td></tr>';
+        tbody.innerHTML = '<tr><td colspan="11"><div class="empty-state"><div class="empty-state-icon">👤</div><div class="empty-state-text">No participants found</div></div></td></tr>';
         return;
       }
 
@@ -434,6 +452,7 @@
           <td style="font-size:12px; max-width:160px; overflow:hidden; text-overflow:ellipsis;">${p.college}</td>
           <td style="font-family:var(--font-mono); font-size:11px;">${p.phone}</td>
           <td style="font-size:12px;">${p.teamName || '—'}</td>
+          <td>${aiVerifyBadge(p)}</td>
           <td>${statusBadge(p.status, p.checkedIn)}</td>
           <td style="font-size:11px; color:var(--text-muted);">${formatDate(p.createdAt)}</td>
           <td>${p.idProof?.path ? `<button class="view-img-btn" onclick="viewID('${p.idProof.path}')">View</button>` : '<span style="color:var(--text-muted);font-size:11px;">None</span>'}</td>
@@ -584,6 +603,122 @@
     // ── Close modals on backdrop click ────────────────────────
     document.getElementById('img-modal').addEventListener('click', e => { if (e.target.id === 'img-modal') closeImgModal(); });
     document.getElementById('qr-modal').addEventListener('click', e => { if (e.target.id === 'qr-modal') closeQRModal(); });
+    document.getElementById('verify-modal').addEventListener('click', e => { if (e.target.id === 'verify-modal') closeVerifyModal(); });
+
+    // ── AI Verification Helpers ────────────────────────────────
+    function aiVerifyBadge(p) {
+      const v = p.idVerification;
+      if (!v || !v.status || v.status === 'pending') {
+        return `<span class="badge" style="background:rgba(255,255,255,0.05);color:var(--text-muted);font-size:10px;cursor:pointer;" onclick="showVerifyDetails('${p._id}')">⏳ Pending</span>`;
+      }
+      const colors = {
+        verified: { bg: 'rgba(0,255,136,0.12)', color: 'var(--accent-green)', icon: '✅' },
+        failed: { bg: 'rgba(255,71,87,0.12)', color: 'var(--accent-red)', icon: '❌' },
+        manual_review: { bg: 'rgba(251,191,36,0.12)', color: 'var(--accent-yellow)', icon: '⚠️' }
+      };
+      const c = colors[v.status] || colors.manual_review;
+      const scoreDisplay = v.score != null ? v.score : '—';
+      return `<span class="badge" style="background:${c.bg};color:${c.color};font-size:10px;cursor:pointer;font-family:var(--font-mono);" onclick="showVerifyDetails('${p._id}')">${c.icon} ${scoreDisplay}%</span>`;
+    }
+
+    async function showVerifyDetails(id) {
+      const modal = document.getElementById('verify-modal');
+      const body = document.getElementById('verify-modal-body');
+      modal.classList.remove('hidden');
+      body.innerHTML = '<div style="text-align:center;padding:20px;color:var(--text-muted);">Loading verification data...</div>';
+
+      const data = await api.get(`/verification/status/${id}`);
+      if (!data.success) {
+        body.innerHTML = `<div style="color:var(--accent-red);">${data.message || 'Failed to load'}</div>`;
+        return;
+      }
+
+      const d = data.data;
+      const v = d.verification || {};
+      const scoreColor = (v.score >= 75) ? 'var(--accent-green)' : (v.score >= 50) ? 'var(--accent-yellow)' : 'var(--accent-red)';
+
+      body.innerHTML = `
+        <div style="display:flex;align-items:center;gap:12px;margin-bottom:20px;">
+          <div style="font-size:2.2rem;font-weight:800;color:${scoreColor};font-family:var(--font-mono);">${v.score || 0}<span style="font-size:0.8rem;color:var(--text-muted);">/100</span></div>
+          <div>
+            <div style="font-weight:600;color:var(--text-primary);">${d.name}</div>
+            <div style="font-size:12px;color:var(--text-muted);">${d.registrationId} · ${d.email}</div>
+          </div>
+        </div>
+
+        <div style="background:var(--bg-elevated);border-radius:var(--radius-md);padding:14px;margin-bottom:16px;">
+          <div style="font-family:var(--font-mono);font-size:10px;color:var(--text-muted);text-transform:uppercase;letter-spacing:0.1em;margin-bottom:6px;">AI Reasoning</div>
+          <div style="font-size:13px;color:var(--text-secondary);line-height:1.6;">${v.reasoning || 'No reasoning available'}</div>
+        </div>
+
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-bottom:16px;">
+          <div style="background:var(--bg-elevated);border-radius:var(--radius-md);padding:12px;">
+            <div style="font-family:var(--font-mono);font-size:10px;color:var(--text-muted);text-transform:uppercase;margin-bottom:4px;">Name on ID</div>
+            <div style="font-size:13px;color:var(--text-primary);">${v.extractedFields?.name || '—'}</div>
+            <div style="font-size:11px;color:var(--text-muted);margin-top:2px;">Registered: ${d.name}</div>
+          </div>
+          <div style="background:var(--bg-elevated);border-radius:var(--radius-md);padding:12px;">
+            <div style="font-family:var(--font-mono);font-size:10px;color:var(--text-muted);text-transform:uppercase;margin-bottom:4px;">Institution on ID</div>
+            <div style="font-size:13px;color:var(--text-primary);">${v.extractedFields?.institution || '—'}</div>
+            <div style="font-size:11px;color:var(--text-muted);margin-top:2px;">Registered: ${d.college || '—'}</div>
+          </div>
+        </div>
+
+        ${v.extractedFields?.idNumber ? `<div style="background:var(--bg-elevated);border-radius:var(--radius-md);padding:12px;margin-bottom:16px;"><div style="font-family:var(--font-mono);font-size:10px;color:var(--text-muted);text-transform:uppercase;margin-bottom:4px;">ID Number</div><div style="font-size:13px;color:var(--accent-cyan);font-family:var(--font-mono);">${v.extractedFields.idNumber}</div></div>` : ''}
+
+        <details style="margin-bottom:16px;">
+          <summary style="cursor:pointer;font-size:12px;color:var(--text-muted);font-family:var(--font-mono);">📄 Raw OCR Text</summary>
+          <pre style="background:var(--bg-elevated);padding:12px;margin-top:8px;border-radius:var(--radius-md);font-size:11px;color:var(--text-secondary);white-space:pre-wrap;max-height:200px;overflow-y:auto;">${v.extractedText || 'No text extracted'}</pre>
+        </details>
+
+        <div style="font-size:11px;color:var(--text-muted);margin-bottom:16px;">Method: ${v.method || 'ai_auto'} · Verified: ${v.verifiedAt ? formatDateTime(v.verifiedAt) : 'N/A'}</div>
+
+        <div style="display:flex;gap:8px;flex-wrap:wrap;">
+          <button onclick="reVerify('${d.registrationId}', '${id}')" class="btn btn-outline btn-sm">🔄 Re-Verify</button>
+          ${d.status === 'pending' || d.status === 'rejected' ? `<button onclick="overrideVerify('${id}', 'approve')" class="btn btn-success btn-sm">✅ Override: Approve</button>` : ''}
+          ${d.status === 'pending' || d.status === 'approved' ? `<button onclick="overrideVerify('${id}', 'reject')" class="btn btn-danger btn-sm">❌ Override: Reject</button>` : ''}
+        </div>
+      `;
+    }
+
+    async function reVerify(regId, id) {
+      showLoader();
+      const data = await api.post(`/verification/re-verify/${id}`, {});
+      hideLoader();
+      if (data.success) {
+        showToast(`Re-verified ${regId}: Score ${data.data.verification.score}/100`, 'success');
+        showVerifyDetails(id);
+        loadParticipants(currentStatus);
+        loadStats();
+      } else {
+        showToast(data.message || 'Re-verification failed', 'error');
+      }
+    }
+
+    async function overrideVerify(id, action) {
+      const reason = prompt(`Reason for ${action}ing (optional):`) || '';
+      showLoader();
+      const data = await api.post(`/verification/override/${id}`, { action, reason });
+      hideLoader();
+      if (data.success) {
+        showToast(data.message, 'success');
+        closeVerifyModal();
+        loadParticipants(currentStatus);
+        loadStats();
+      } else {
+        showToast(data.message || 'Override failed', 'error');
+      }
+    }
+
+    function closeVerifyModal() { document.getElementById('verify-modal').classList.add('hidden'); }
+
+    // Load AI verification stats for sidebar count
+    async function loadVerificationStats() {
+      const data = await api.get('/verification/stats');
+      if (data.success) {
+        document.getElementById('cnt-ai-verified').textContent = data.stats.verified;
+      }
+    }
   </script>
 </body>
 </html>
