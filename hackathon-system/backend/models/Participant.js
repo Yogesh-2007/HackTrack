@@ -47,6 +47,29 @@ const participantSchema = new mongoose.Schema({
     uploadedAt: Date
   },
 
+  // AI Identity Verification
+  idVerification: {
+    status: {
+      type: String,
+      enum: ['pending', 'verified', 'failed', 'manual_review'],
+      default: 'pending'
+    },
+    score: { type: Number, min: 0, max: 100, default: 0 },
+    reasoning: String,
+    extractedText: String,
+    extractedFields: {
+      name: String,
+      institution: String,
+      idNumber: String
+    },
+    verifiedAt: Date,
+    method: {
+      type: String,
+      enum: ['ai_auto', 'manual_admin'],
+      default: 'ai_auto'
+    }
+  },
+
   // Registration
   registrationId: {
     type: String,

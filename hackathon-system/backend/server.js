@@ -58,6 +58,7 @@ mongoose.connect(process.env.MONGO_URI || 'mongodb://localhost:27017/hackathon_d
 app.use('/api/auth',        authLimiter, require('./routes/auth'));
 app.use('/api/participants',              require('./routes/participants'));
 app.use('/api/admin',                    require('./routes/admin'));
+app.use('/api/verification',             require('./routes/verification'));
 app.use('/api/qr',          scanLimiter, require('./routes/qr'));
 app.use('/api/judges',                   require('./routes/judges'));
 app.use('/api/leaderboard',              require('./routes/leaderboard'));

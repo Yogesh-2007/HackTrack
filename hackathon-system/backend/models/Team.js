@@ -56,6 +56,29 @@ const teamSchema = new mongoose.Schema({
     default: 'Other'
   },
 
+  // AI Identity Verification (team leader)
+  idVerification: {
+    status: {
+      type: String,
+      enum: ['pending', 'verified', 'failed', 'manual_review'],
+      default: 'pending'
+    },
+    score: { type: Number, min: 0, max: 100, default: 0 },
+    reasoning: String,
+    extractedText: String,
+    extractedFields: {
+      name: String,
+      institution: String,
+      idNumber: String
+    },
+    verifiedAt: Date,
+    method: {
+      type: String,
+      enum: ['ai_auto', 'manual_admin'],
+      default: 'ai_auto'
+    }
+  },
+
   registrationDate: { type: Date, default: Date.now },
 
   // ── Status & Admin Fields ─────────────────────────────────

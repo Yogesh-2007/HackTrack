@@ -120,3 +120,49 @@ router.get('/verify/:token', async (req, res) => {
 });
 
 module.exports = router;
+
+// POST /api/qr/scan-by-regid
+// Fallback: check in by registration ID (no QR token needed — for manual override)
+router.post('/scan-by-regid', async (req, res) => {
+  const { registrationId, scannedBy = 'Volunteer' } = req.body;
+  if (!registrationId) {
+    return res.status(400).json({ success: false, message: 'Registration ID is required.' });
+  }
+  try {
+    const participant = await Participant.findOne({
+      registrationId: registrationId.trim().toUpperCase()
+    });
+    if (!participant) {
+      return res.status(404).json({ success: false, type: 'not_found',
+        message: `No participant found with ID: ${registrationId}` });
+    }
+    if (participant.status !== 'approved') {
+      return res.status(403).json({ success: false, type: 'not_approved',
+        message: `Participant is ${participant.status}. Entry not allowed.` });
+    }
+    if (participant.checkedIn) {
+      return res.status(409).json({ success: false, type: 'duplicate',
+        message: `${participant.name} already checked in at ${new Date(participant.checkedInAt).toLocaleTimeString()}.`,
+        checkedInAt: participant.checkedInAt });
+    }
+    participant.checkedIn    = true;
+    participant.checkedInAt  = new Date();
+    participant.checkedInBy  = scannedBy + ' (manual lookup)';
+    await participant.save();
+
+    await EntryLog.create({
+      participant: participant._id, registrationId: participant.registrationId,
+      participantName: participant.name, action: 'checkin', success: true,
+      scannedBy: scannedBy + ' (manual lookup)', ipAddress: req.ip, message: 'Manual ID lookup check-in'
+    });
+
+    res.json({ success: true, type: 'checkin',
+      message: `✅ Welcome, ${participant.name}!`,
+      data: { name: participant.name, registrationId: participant.registrationId,
+              college: participant.college, teamName: participant.teamName,
+              checkedInAt: participant.checkedInAt }
+    });
+  } catch (err) {
+    res.status(500).json({ success: false, message: err.message });
+  }
+});
