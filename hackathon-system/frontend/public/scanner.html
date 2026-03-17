@@ -5,9 +5,8 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>QR Scanner — HackTrack</title>
   <link rel="stylesheet" href="/css/style.css">
-  <link rel="stylesheet" href="/css/chatbot.css">
-  <!-- jsQR: try both attemptBoth inversionAttempts for maximum compatibility -->
-  <script src="https://cdnjs.cloudflare.com/ajax/libs/jsqr/1.4.0/jsQR.min.js"></script>
+  <!-- html5-qrcode -->
+  <script src="https://unpkg.com/html5-qrcode"></script>
   <style>
     .scanner-page { max-width: 860px; margin: 0 auto; padding: 28px 16px 60px; position: relative; z-index: 1; }
     .scanner-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 20px; }
@@ -19,8 +18,8 @@
       overflow: hidden; border: 2px solid var(--border);
       background: #000; aspect-ratio: 4/3;
     }
-    #video-element { width:100%; height:100%; display:block; object-fit:cover; }
-    canvas#scan-canvas { display:none; }
+    #reader { width:100%; height:100%; display:block; }
+    #reader video { width:100% !important; height:100% !important; object-fit:cover; display:block; }
 
     /* Corner-bracket overlay (doesn't block view) */
     .scan-overlay {
@@ -183,7 +182,7 @@
         <div class="card-title">📷 Camera Scanner</div>
 
         <div class="video-wrap" id="video-wrap">
-          <video id="video-element" autoplay playsinline muted></video>
+          <div id="reader"></div>
           <div class="scan-overlay">
             <div class="scan-box">
               <span></span>
@@ -191,7 +190,6 @@
             </div>
           </div>
         </div>
-        <canvas id="scan-canvas"></canvas>
 
         <div class="cam-status-bar">
           <div class="cam-dot" id="cam-dot"></div>
@@ -201,7 +199,6 @@
         <div class="scanner-controls">
           <button onclick="startCamera()" class="btn btn-primary btn-sm" id="start-btn">▶ Start Camera</button>
           <button onclick="stopCamera()"  class="btn btn-ghost btn-sm"   id="stop-btn"  disabled>⏹ Stop</button>
-          <button onclick="toggleFlash()" class="btn btn-ghost btn-sm"   id="flash-btn" disabled>🔦 Flash</button>
           <button onclick="toggleDebug()" class="btn btn-ghost btn-sm"   style="font-size:11px;">🔧 Debug</button>
         </div>
 
@@ -271,71 +268,70 @@
 /* ══════════════════════════════════════════════════
    STATE
    ══════════════════════════════════════════════════ */
-let videoStream   = null;
-let scanInterval  = null;
+let html5QrCode   = null;
 let lastToken     = null;
 let lastScanTime  = 0;
-let flashTrack    = null;
-let flashOn       = false;
 let frameCount    = 0;
 let debugVisible  = false;
 let cntOk = 0, cntDup = 0, cntErr = 0;
-
-const video  = document.getElementById('video-element');
-const canvas = document.getElementById('scan-canvas');
-const ctx    = canvas.getContext('2d', { willReadFrequently: true });
 
 /* ══════════════════════════════════════════════════
    CAMERA
    ══════════════════════════════════════════════════ */
 async function startCamera() {
-  setStatus('Requesting camera permission…', '');
+  setStatus('Starting camera…', '');
+  document.getElementById('start-btn').disabled = true;
+
+  html5QrCode = new Html5Qrcode("reader");
+  
   try {
-    // Try rear camera first, fall back to any camera
-    let stream;
-    try {
-      stream = await navigator.mediaDevices.getUserMedia({
-        video: { facingMode: { ideal: 'environment' }, width: { ideal: 1280 }, height: { ideal: 720 } }
-      });
-    } catch {
-      stream = await navigator.mediaDevices.getUserMedia({ video: true });
-    }
+    const config = { fps: 10, qrbox: { width: 250, height: 250 } };
+    await html5QrCode.start(
+      { facingMode: "environment" },
+      config,
+      (decodedText, decodedResult) => {
+        frameCount++;
+        if (debugVisible) {
+          document.getElementById('debug-text').textContent =
+            `Frame: ${frameCount} | QR: ✅ FOUND`;
+        }
 
-    videoStream = stream;
-    video.srcObject = stream;
-    await video.play();
+        const now = Date.now();
+        if (decodedText === lastToken && now - lastScanTime < 4000) return; // 4s debounce
+        lastToken    = decodedText;
+        lastScanTime = now;
+        processToken(decodedText);
+      },
+      (errorMessage) => {
+        frameCount++;
+        if (debugVisible && frameCount % 10 === 0) {
+           document.getElementById('debug-text').textContent = `Frame: ${frameCount} | Scanning...`;
+        }
+      }
+    );
 
-    const track = stream.getVideoTracks()[0];
-    flashTrack = track;
-    const caps = track.getCapabilities ? track.getCapabilities() : {};
-    document.getElementById('flash-btn').disabled = !caps.torch;
-
-    document.getElementById('start-btn').disabled = true;
     document.getElementById('stop-btn').disabled  = false;
     document.getElementById('scan-line').style.display = 'block';
     setStatus('🟢 Scanning… hold QR inside the brackets', 'active');
-
-    scanInterval = setInterval(scanFrame, 150);  // scan every 150ms (was 250)
-
   } catch (err) {
-    setStatus('❌ ' + err.message, 'error');
-    showToast('Camera error: ' + err.message, 'error');
-
-    if (err.name === 'NotAllowedError') {
-      showToast('Camera permission denied. Use Manual Token input below.', 'warning', 6000);
-    }
+    setStatus('❌ ' + err, 'error');
+    document.getElementById('start-btn').disabled = false;
+    showToast('Camera error: ' + err, 'error');
   }
 }
 
 function stopCamera() {
-  if (videoStream) { videoStream.getTracks().forEach(t => t.stop()); videoStream = null; }
-  if (scanInterval) { clearInterval(scanInterval); scanInterval = null; }
-  video.srcObject = null;
-  document.getElementById('start-btn').disabled = false;
-  document.getElementById('stop-btn').disabled  = true;
-  document.getElementById('flash-btn').disabled = true;
-  document.getElementById('scan-line').style.display = 'none';
-  setStatus('Camera stopped.', '');
+  if (html5QrCode) {
+    html5QrCode.stop().then(() => {
+      html5QrCode.clear();
+      document.getElementById('start-btn').disabled = false;
+      document.getElementById('stop-btn').disabled  = true;
+      document.getElementById('scan-line').style.display = 'none';
+      setStatus('Camera stopped.', '');
+    }).catch(err => {
+      console.error("Failed to stop scanner", err);
+    });
+  }
 }
 
 function setStatus(msg, state) {
@@ -344,50 +340,9 @@ function setStatus(msg, state) {
   dot.className = 'cam-dot' + (state ? ' ' + state : '');
 }
 
-async function toggleFlash() {
-  if (!flashTrack) return;
-  flashOn = !flashOn;
-  try {
-    await flashTrack.applyConstraints({ advanced: [{ torch: flashOn }] });
-    document.getElementById('flash-btn').textContent = flashOn ? '🔦 Flash OFF' : '🔦 Flash';
-  } catch { showToast('Flash not supported on this device.', 'warning'); }
-}
-
 function toggleDebug() {
   debugVisible = !debugVisible;
   document.getElementById('debug-panel').classList.toggle('show', debugVisible);
-}
-
-/* ══════════════════════════════════════════════════
-   FRAME SCANNING
-   ══════════════════════════════════════════════════ */
-function scanFrame() {
-  if (!video.videoWidth || !video.videoHeight) return;
-
-  frameCount++;
-  canvas.width  = video.videoWidth;
-  canvas.height = video.videoHeight;
-  ctx.drawImage(video, 0, 0);
-
-  const imageData = ctx.getImageData(0, 0, canvas.width, canvas.height);
-
-  // FIX: use 'attemptBoth' — handles both light-on-dark and dark-on-light QRs
-  const code = jsQR(imageData.data, imageData.width, imageData.height, {
-    inversionAttempts: 'attemptBoth'
-  });
-
-  if (debugVisible) {
-    document.getElementById('debug-text').textContent =
-      `Frame: ${frameCount} | Size: ${canvas.width}×${canvas.height} | QR: ${code ? '✅ FOUND' : 'not found'}`;
-  }
-
-  if (code && code.data) {
-    const now = Date.now();
-    if (code.data === lastToken && now - lastScanTime < 4000) return; // 4s debounce
-    lastToken    = code.data;
-    lastScanTime = now;
-    processToken(code.data);
-  }
 }
 
 /* ══════════════════════════════════════════════════
@@ -520,6 +475,6 @@ function beep(success) {
 
 window.addEventListener('beforeunload', stopCamera);
 </script>
-<script src="/js/chatbot.js"></script>
+<script src="/js/nexus-chatbot.js"></script>
 </body>
 </html>

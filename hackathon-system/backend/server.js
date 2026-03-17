@@ -62,6 +62,7 @@ app.use('/api/verification',             require('./routes/verification'));
 app.use('/api/qr',          scanLimiter, require('./routes/qr'));
 app.use('/api/judges',                   require('./routes/judges'));
 app.use('/api/leaderboard',              require('./routes/leaderboard'));
+app.use('/api/chat',                     require('./routes/chat'));
 
 // ── Serve Frontend Pages ───────────────────────────────────────────────────────
 app.get('*', (req, res) => {
